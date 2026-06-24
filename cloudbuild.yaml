@@ -1,0 +1,31 @@
+steps:
+  # ── ステップ1：Docker イメージをビルドする ──────────────
+  - name: 'gcr.io/cloud-builders/docker'
+	args:
+	  - 'build'
+	  - '-t'
+	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+	  - '.'
+
+  # ── ステップ2：Artifact Registry にイメージを保存する ────
+  - name: 'gcr.io/cloud-builders/docker'
+	args:
+	  - 'push'
+	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+
+  # ── ステップ3：Cloud Run にデプロイする ──────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+	entrypoint: 'gcloud'
+	args:
+	  - 'run'
+	  - 'deploy'
+	  - 'test001'
+	  - '--image'
+	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+	  - '--region'
+	  - 'asia-northeast1'
+	  - '--platform'
+	  - 'managed'
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
