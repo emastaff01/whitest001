@@ -1,2 +1,2 @@
 # whitehouse-imari
-テスト用
+テスト用サイト
