@@ -1,0 +1,20 @@
+# 依存ライブラリ（容量が大きくGitに含めない。各自 npm install で復元する）
+node_modules/
+
+# ビルド成果物（Cloud Build 側で生成するためコミット不要）
+dist/
+
+# Astro の生成キャッシュ
+.astro/
+
+# 環境変数の実ファイル（秘密情報を含むため絶対にコミットしない）
+.env
+.env.local
+.env.*.local
+
+# OS・エディタが作る不要ファイル
+.DS_Store
+*.log
+npm-debug.log*
+# Cloudflare Worker は独立したリポジトリで管理するため、このリポジトリには含めない
+whitehouse-imari-contact-worker/

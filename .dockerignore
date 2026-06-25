@@ -1,0 +1,12 @@
+# Dockerイメージのビルド時にコピーしないものを指定する。
+# node_modules はイメージ内で改めて npm ci するため除外（軽量化・再現性向上）。
+node_modules
+dist
+.astro
+.git
+.gitignore
+.env
+.env.*
+*.log
+.DS_Store
+README.md
