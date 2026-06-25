@@ -1,0 +1,101 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "text": "お二人の現在の状況を教えてください",
+      "choices": [
+        { "id": "q1a", "text": "まだ婚約・入籍前だけど気になっている", "result": "D" },
+        { "id": "q1b", "text": "最近入籍したばかり",                    "result": "B" },
+        { "id": "q1c", "text": "入籍して少し経った",                    "result": "C" },
+        { "id": "q1d", "text": "式の日取りは決めている",                "result": "C" }
+      ]
+    },
+    {
+      "id": "q2",
+      "text": "招待したい人数のイメージは？",
+      "choices": [
+        { "id": "q2a", "text": "家族と親しい友人だけ（〜20名くらい）", "result": "A" },
+        { "id": "q2b", "text": "中規模でアットホームに（20〜50名）",   "result": "B" },
+        { "id": "q2c", "text": "盛大に大勢で（50名以上）",             "result": "C" },
+        { "id": "q2d", "text": "まだ全然決まっていない",               "result": "D" }
+      ]
+    },
+    {
+      "id": "q3",
+      "text": "どんな雰囲気の式にしたいですか？",
+      "choices": [
+        { "id": "q3a", "text": "白とナチュラルで清楚に",               "result": "B" },
+        { "id": "q3b", "text": "クラシックで格調ある雰囲気",           "result": "C" },
+        { "id": "q3c", "text": "アットホームで温かみのある",           "result": "A" },
+        { "id": "q3d", "text": "まだイメージが湧いていない",           "result": "D" }
+      ]
+    },
+    {
+      "id": "q4",
+      "text": "特に大切にしたいことは何ですか？",
+      "multiSelect": true,
+      "choices": [
+        { "id": "q4a", "text": "料理・食事のクオリティ",               "result": "C" },
+        { "id": "q4b", "text": "写真・映像の思い出",                   "result": "B" },
+        { "id": "q4c", "text": "ドレス・衣装",                         "result": "C" },
+        { "id": "q4d", "text": "ゲストへのおもてなし",                 "result": "A" },
+        { "id": "q4e", "text": "費用をできるだけ抑えたい",             "result": "A" },
+        { "id": "q4f", "text": "演出・エンタメ",                       "result": "B" }
+      ]
+    },
+    {
+      "id": "q5",
+      "text": "式を挙げたいと思っている時期は？",
+      "choices": [
+        { "id": "q5a", "text": "半年以内",             "result": "C" },
+        { "id": "q5b", "text": "半年〜1年以内",        "result": "B" },
+        { "id": "q5c", "text": "1年以上先",            "result": "A" },
+        { "id": "q5d", "text": "まだ決まっていない",   "result": "D" }
+      ]
+    },
+    {
+      "id": "q6",
+      "text": "今一番気になっていることは？",
+      "choices": [
+        { "id": "q6a", "text": "費用の目安を知りたい",             "result": "A" },
+        { "id": "q6b", "text": "式場の雰囲気を見てみたい",         "result": "D" },
+        { "id": "q6c", "text": "何から始めればいいかわからない",   "result": "D" },
+        { "id": "q6d", "text": "プランの内容を詳しく知りたい",     "result": "B" }
+      ]
+    }
+  ],
+"results": {
+    "A": {
+      "label": "少人数・アットホームスタイル",
+      "message": "大切な人だけを招いて、温かくアットホームな式を。少人数だからこそできる、ゆったりとした時間の流れをご提案します。",
+      "fairId": "small-wedding-fair",
+      "fairTitle": "少人数のコンパクトな結婚式！",
+      "planId": "standard",
+      "planTitle": "スタンダード ウェディング プラン"
+    },
+    "B": {
+      "label": "バランス重視・スタンダードスタイル",
+      "message": "家族も友人も、みんなに喜んでもらえる式を。費用・演出・おもてなし、バランスよく叶えるプランをご用意しています。",
+      "fairId": "premium-tour-202606",
+      "fairTitle": "リブランドOPEN記念 邸宅まるごと貸切見学フェア",
+      "planId": "standard",
+      "planTitle": "スタンダード ウェディング プラン"
+    },
+    "C": {
+      "label": "こだわり・上質スタイル",
+      "message": "料理・衣装・演出、すべてにこだわり抜いた特別な一日を。ホワイトハウス伊万里が誇るクラシックな空間で、格調ある式を実現します。",
+      "fairId": "premium-tour-202606",
+      "fairTitle": "リブランドOPEN記念 邸宅まるごと貸切見学フェア",
+      "planId": "private-full",
+      "planTitle": "1棟貸切ウェディング プラン"
+    },
+    "D": {
+      "label": "まずは相談スタイル",
+      "message": "式のイメージがまだ固まっていなくて大丈夫。まずはお気軽にご来館ください。スタッフが一緒にイメージを整理します。",
+      "fairId": "small-wedding-fair",
+      "fairTitle": "少人数のコンパクトな結婚式！",
+      "planId": null,
+      "planTitle": null
+    }
+  }
+}

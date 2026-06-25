@@ -2,29 +2,27 @@
 // 右下に追従するフローティングナビ
 // 中身：(1) ブライダルフェアのバナー（常時表示） (2) ページ上部へ戻るボタン（スクロールで出現）
 import { url } from '../../lib/url';
-
-// base（サブディレクトリ '/test-whi'）を画像パスへ付ける準備。
-// この環境の BASE_URL は末尾スラッシュ無し（'/test-whi'）なので、
-// 末尾スラッシュ除去 → パス先頭スラッシュ除去 → スラッシュ1個で連結する。
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const asset = (p: string): string => `${BASE}/${p.replace(/^\/+/, '')}`;
-// .png を .webp に置き換える（<picture> の webp 用）
 const webp = (p: string): string => asset(p).replace(/\.png$/i, '.webp');
-
-// バナー画像（public/images/floating/ に png + webp のペアを配置）
 const bannerPng = '/images/floating/fair_banner.png';
 
-// バナーのリンク先。内部リンクは url() を通す（base 自動付与でリンク切れ防止）
-const fairUrl = url('/fair/');
+const diagUrl = url('/diagnosis/'); // 診断ページのURL
 ---
 
 <div class="floating">
-  <!-- ブライダルフェアのバナー（常時表示） -->
-  <a href={fairUrl} class="floating__banner" aria-label="ブライダルフェア実施中。詳しく見る">
-    <picture>
-      <source srcset={webp(bannerPng)} type="image/webp" />
-      <img src={asset(bannerPng)} alt="ブライダルフェア実施中！" loading="lazy" decoding="async" />
-    </picture>
+  <!-- 診断バナー（常時表示） -->
+  <a href={diagUrl} class="floating__banner" aria-label="結婚式スタイル診断をはじめる">
+  <p class="floating__banner-img"><picture>
+    <source srcset={webp(bannerPng)} type="image/webp" />
+    <img src={asset(bannerPng)} alt="ブライダルフェア実施中！" loading="lazy" decoding="async" />
+  </picture></p>
+    <span class="floating__banner__inner">
+    
+    <p class="floating__banner-sub">何も決まってない...<br>自分にあった結婚式がわからない方必見！</p>
+    <p class="floating__banner-main">自分に合うスタイルを診断!!<br>結婚式スタイル診断をはじめる</p>
+    </span>
+    <p class="floating__banner-arrow" aria-hidden="true">→</p>
   </a>
 
   <!-- ページ上部へ戻るボタン（スクロールすると出現） -->
@@ -48,15 +46,64 @@ const fairUrl = url('/fair/');
   gap: 12px;
 }
 .floating__banner {
-  display: block;
-  width: clamp(200px, 32vw, 300px);
-  line-height: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  width: clamp(220px, 22vw, 400px);
+  background: var(--red);
+  color: var(--white);
+  text-decoration: none;
+  border-radius: 6px 0 0 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  align-items:center;
 }
-.floating__banner:hover { transform: translateY(-2px); }
-.floating__banner img { width: 100%; height: auto; }
+.floating__banner .floating__banner__inner {
+display: flex;
+flex-direction: column;
+padding:8px;
+align-self:center;
+width:60%;
+}
+.floating__banner:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+.floating__banner-img {
+ width:30%;
+ height:auto;
+}
+.floating__banner-img img{
+ width:100%;
+ height:auto;
+ object-fit:cover;
+ aspect-ratio:1/1;
+}
+.floating__banner-sub {
+  font-family: var(--font-en-label);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+  color: var(--white);
+}
+.floating__banner-main {
+  font-size: 0.85rem;
+  font-weight: bold;
+  line-height: 1.4;
+  color: var(--white);
+}
+.floating__banner-arrow {
+  font-size: 1rem;
+  margin: 4px 4px 0 0;
+  opacity: 0.8;
+  color: var(--white);
+  width:10%;
+  height:auto;
+  border:1px solid var(--white);
+  border-radius:1.4rem;
+  text-align:center;
+  line-height:2.2;
+}
 .floating__top {
   display: inline-flex;
   flex-direction: column;

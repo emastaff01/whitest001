@@ -1,0 +1,516 @@
+---
+// ビルド時にJSONを読み込む（Astroのfrontmatterはサーバー側で実行）
+import diagnosisData from '../../data/diagnosis.json';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+
+const { questions, results } = diagnosisData;
+
+// JSON島としてクライアント側に渡すデータを準備
+// JavaScriptのオブジェクトにそのまま埋め込むと危険なため、
+// JSON.stringifyで文字列化してからHTMLに出力する
+const dataJson = JSON.stringify({ questions, results });
+---
+
+<BaseLayout title="結婚式スタイル診断 | ホワイトハウス伊万里">
+
+  <div class="diag-wrap">
+
+    <!-- ページヘッダー -->
+    <header class="diag-header">
+      <p class="diag-header__sub">Wedding Style Check</p>
+      <h1 class="diag-header__title">結婚式スタイル診断</h1>
+      <p class="diag-header__lead">
+        6つの質問に答えるだけで、あなたにぴったりのフェア・プランをご提案します。<br>
+        まだイメージが固まっていなくても大丈夫です。
+      </p>
+    </header>
+
+    <!-- 診断本体 -->
+    <div class="diag-body" id="diag-body">
+
+      <!-- ステップインジケーター（「Q1 / 6」の表示） -->
+      <div class="diag-indicator" id="diag-indicator" aria-live="polite">
+        <span id="diag-step">Q1</span> / <span id="diag-total">6</span>
+      </div>
+
+      <!-- プログレスバー -->
+      <div class="diag-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="diag-progress__bar" id="diag-progress-bar" style="width: 0%"></div>
+      </div>
+
+      <!-- 質問エリア（JavaScriptで中身を差し替える） -->
+      <div class="diag-question" id="diag-question"></div>
+
+      <!-- 選択肢エリア（JavaScriptで中身を差し替える） -->
+      <div class="diag-choices" id="diag-choices"></div>
+
+      <!-- ナビゲーション（戻る・次へ） -->
+      <div class="diag-nav">
+        <button class="diag-nav__back" id="diag-back" type="button">
+          前の質問に戻る
+        </button>
+        <!-- Q4（複数選択）のときだけ「次へ」ボタンが表示される -->
+        <button class="diag-nav__next" id="diag-next" type="button" hidden>
+          次へ進む
+        </button>
+      </div>
+
+    </div>
+
+    <!-- 結果エリア（最初は非表示） -->
+    <div class="diag-result" id="diag-result" hidden>
+      <p class="diag-result__label" id="diag-result-label"></p>
+      <h2 class="diag-result__title" id="diag-result-title"></h2>
+      <p class="diag-result__message" id="diag-result-message"></p>
+
+      <div class="diag-result__cards" id="diag-result-cards"></div>
+
+      <div class="diag-result__actions">
+        <button class="diag-result__retry" id="diag-retry" type="button">
+          もう一度診断する
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JSON島：ビルド時に生成したデータをクライアントのJSに渡す -->
+  <script type="application/json" id="diag-data" is:inline>
+    <!-- ここはAstroが式展開しないためtemplate要素を使う -->
+  </script>
+  <template id="diag-data-tpl">{dataJson}</template>
+
+  <script>
+    // ---- データ読み込み ----
+    // <template>タグの中身はinnerHTMLで取得する（textContentだと空になる）
+    const tpl = document.getElementById('diag-data-tpl') as HTMLTemplateElement;
+    const { questions, results } = JSON.parse(tpl.innerHTML) as {
+      questions: Question[];
+      results: Record<string, Result>;
+    };
+
+    // ---- 型定義 ----
+    type Choice = {
+      id: string;
+      text: string;
+      result: string;
+    };
+    type Question = {
+      id: string;
+      text: string;
+      multiSelect?: boolean;
+      choices: Choice[];
+    };
+    type Result = {
+      label: string;
+      message: string;
+      fairId: string;
+      fairTitle: string;
+      planId: string | null;
+      planTitle: string | null;
+    };
+
+    // ---- 状態管理 ----
+    let currentIndex = 0;                    // 現在の質問番号（0始まり）
+    const answers: Record<string, string[]> = {}; // { q1: ['q1a'], q4: ['q4a','q4c'], ... }
+
+    // ---- DOM取得 ----
+    const bodyEl    = document.getElementById('diag-body')!;
+    const resultEl  = document.getElementById('diag-result')!;
+    const stepEl    = document.getElementById('diag-step')!;
+    const totalEl   = document.getElementById('diag-total')!;
+    const progressEl= document.getElementById('diag-progress-bar')!;
+    const questionEl= document.getElementById('diag-question')!;
+    const choicesEl = document.getElementById('diag-choices')!;
+    const backBtn   = document.getElementById('diag-back')   as HTMLButtonElement;
+    const nextBtn   = document.getElementById('diag-next')   as HTMLButtonElement;
+    const retryBtn  = document.getElementById('diag-retry')  as HTMLButtonElement;
+
+    // ---- 初期化 ----
+    totalEl.textContent = String(questions.length);
+
+    // ---- 質問を描画する ----
+    function renderQuestion(index: number) {
+      const q = questions[index];
+      const isMulti = q.multiSelect === true;
+
+      // ステップ表示を更新
+      stepEl.textContent = `Q${index + 1}`;
+
+      // プログレスバーを更新（現在の質問が始まった時点のパーセンテージ）
+      const pct = Math.round((index / questions.length) * 100);
+      progressEl.style.width = `${pct}%`;
+      progressEl.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', String(pct));
+
+      // 質問テキストを差し替え
+      questionEl.innerHTML = `<h2 class="diag-question__text">${q.text}</h2>
+        ${isMulti ? '<p class="diag-question__note">（複数選択できます）</p>' : ''}`;
+
+      // 選択肢を描画
+      // isMulti（複数選択）のときはcheckbox、それ以外はbuttonで描画
+      if (isMulti) {
+        // 複数選択：チェックボックス形式
+        const saved = answers[q.id] ?? [];
+        choicesEl.innerHTML = q.choices.map(c => `
+          <label class="diag-choice diag-choice--check ${saved.includes(c.id) ? 'is-checked' : ''}" data-id="${c.id}">
+            <input type="checkbox" value="${c.id}" ${saved.includes(c.id) ? 'checked' : ''} hidden>
+            <span>${c.text}</span>
+          </label>
+        `).join('');
+
+        // チェックボックスのラベルをクリックしたときの処理
+        choicesEl.querySelectorAll<HTMLLabelElement>('.diag-choice--check').forEach(label => {
+          label.addEventListener('click', () => {
+            const cb = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
+            // clickイベントがcheckboxにも伝播するので、状態変化後に判定する
+            setTimeout(() => {
+              label.classList.toggle('is-checked', cb.checked);
+              updateNextBtn(q.id);
+            }, 0);
+          });
+        });
+
+        // 1つ以上選択されたら「次へ」ボタンを表示
+        nextBtn.hidden = false;
+        updateNextBtn(q.id);
+
+      } else {
+        // 単一選択：ボタン形式（クリックで即座に次の質問へ）
+        const saved = answers[q.id]?.[0];
+        choicesEl.innerHTML = q.choices.map(c => `
+          <button class="diag-choice ${saved === c.id ? 'is-selected' : ''}"
+                  type="button" data-id="${c.id}" data-result="${c.result}">
+            ${c.text}
+          </button>
+        `).join('');
+
+        choicesEl.querySelectorAll<HTMLButtonElement>('.diag-choice').forEach(btn => {
+          btn.addEventListener('click', () => {
+            // 回答を保存してすぐ次へ進む
+            answers[q.id] = [btn.dataset.id!];
+            goNext();
+          });
+        });
+
+        // 単一選択は「次へ」ボタン不要
+        nextBtn.hidden = true;
+      }
+
+      // 「前へ」ボタンの表示制御（最初の質問では非表示）
+      backBtn.hidden = index === 0;
+    }
+
+    // ---- 「次へ」ボタンの活性制御（複数選択用） ----
+    function updateNextBtn(qId: string) {
+      const checked = choicesEl.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
+      nextBtn.disabled = checked.length === 0;
+      // 選択済みの回答を一時保存（戻ったときに復元するため）
+      answers[qId] = Array.from(checked).map(cb => cb.value);
+    }
+
+    // ---- 次の質問へ進む ----
+    function goNext() {
+      if (currentIndex < questions.length - 1) {
+        currentIndex++;
+        renderQuestion(currentIndex);
+      } else {
+        // 全問回答 → 結果を表示
+        showResult();
+      }
+    }
+
+    // ---- スコアリング：最多ラベルを求める ----
+    function calcResult(): string {
+      const scores: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+
+      questions.forEach(q => {
+        const selected = answers[q.id] ?? [];
+        selected.forEach(choiceId => {
+          const choice = q.choices.find(c => c.id === choiceId);
+          if (choice) scores[choice.result]++;
+        });
+      });
+
+      // 最高スコアのラベルを返す（同点の場合はDを優先）
+      let best = 'D';
+      let bestScore = -1;
+      (['A', 'B', 'C', 'D'] as const).forEach(key => {
+        // 同点の場合は先に出てきた方を維持するため「>」（「>=」にしない）
+        // ただしDだけは同点でも優先したいので順番をD最後にして「>=」で上書き
+        if (key === 'D') {
+          if (scores[key] >= bestScore) { best = key; bestScore = scores[key]; }
+        } else {
+          if (scores[key] > bestScore) { best = key; bestScore = scores[key]; }
+        }
+      });
+
+      return best;
+    }
+
+    // ---- 結果を表示する ----
+    function showResult() {
+      const key = calcResult();
+      const r = results[key];
+
+      // プログレスバーを100%にする
+      progressEl.style.width = '100%';
+      progressEl.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', '100');
+
+      // 結果エリアに内容をセット
+      document.getElementById('diag-result-label')!.textContent   = `あなたのスタイル：${r.label}`;
+      document.getElementById('diag-result-title')!.textContent   = `あなたにぴったりのフェア・プランをご紹介します`;
+      document.getElementById('diag-result-message')!.textContent = r.message;
+
+      // フェア・プランのカードを生成
+      const cardsEl = document.getElementById('diag-result-cards')!;
+      const BASE = (document.querySelector('meta[name="base-path"]') as HTMLMetaElement)?.content ?? '';
+
+      let cardsHtml = `
+        <div class="diag-card">
+          <p class="diag-card__type">おすすめフェア</p>
+          <p class="diag-card__title">${r.fairTitle}</p>
+          <a class="diag-card__btn" href="${BASE}/fair/${r.fairId}/">フェアの詳細を見る</a>
+        </div>
+      `;
+      if (r.planId && r.planTitle) {
+        cardsHtml += `
+          <div class="diag-card">
+            <p class="diag-card__type">おすすめプラン</p>
+            <p class="diag-card__title">${r.planTitle}</p>
+            <a class="diag-card__btn" href="${BASE}/plan/${r.planId}/">プランの詳細を見る</a>
+          </div>
+        `;
+      }
+      cardsEl.innerHTML = cardsHtml;
+
+      // 質問エリアを隠して結果エリアを表示
+      bodyEl.hidden   = true;
+      resultEl.hidden = false;
+    }
+
+    // ---- もう一度診断する ----
+    function resetDiag() {
+      currentIndex = 0;
+      Object.keys(answers).forEach(k => delete answers[k]);
+      bodyEl.hidden   = false;
+      resultEl.hidden = true;
+      renderQuestion(0);
+    }
+
+    // ---- イベント登録 ----
+    backBtn.addEventListener('click', () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        renderQuestion(currentIndex);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      // 複数選択のとき「次へ」ボタンで進む
+      const q = questions[currentIndex];
+      const checked = choicesEl.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
+      answers[q.id] = Array.from(checked).map(cb => cb.value);
+      goNext();
+    });
+
+    retryBtn.addEventListener('click', resetDiag);
+
+    // ---- 最初の質問を表示 ----
+    renderQuestion(0);
+  </script>
+
+  <style>
+    /* :global() で囲むことで、JavaScriptのinnerHTMLで生成した要素にもCSSが当たる */
+  
+    :global(.diag-wrap) {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem 6rem;
+    }
+  
+    :global(.diag-header) {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    :global(.diag-header__sub) {
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      color: var(--bronze);
+      margin-bottom: 0.5rem;
+    }
+    :global(.diag-header__title) {
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      margin-bottom: 1rem;
+    }
+    :global(.diag-header__lead) {
+      font-size: 0.9rem;
+      line-height: 1.8;
+      color: #666;
+    }
+  
+    :global(.diag-indicator) {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--bronze);
+      margin-bottom: 0.5rem;
+    }
+  
+    :global(.diag-progress) {
+      height: 4px;
+      background: #e8e0d8;
+      border-radius: 2px;
+      margin-bottom: 2.5rem;
+      overflow: hidden;
+    }
+    :global(.diag-progress__bar) {
+      height: 100%;
+      background: var(--bronze);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+  
+    :global(.diag-question__text) {
+      font-size: clamp(1.1rem, 3vw, 1.35rem);
+      text-align: center;
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+    :global(.diag-question__note) {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 1.5rem;
+    }
+  
+    :global(.diag-choices) {
+      display: grid;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    :global(.diag-choice) {
+      display: block;
+      width: 100%;
+      padding: 1rem 1.25rem;
+      border: 1px solid #d4c9bc;
+      background: #fff;
+      border-radius: var(--radius, 2px);
+      font-size: 0.95rem;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      line-height: 1.5;
+    }
+    :global(.diag-choice:hover) {
+      border-color: var(--bronze);
+      background: #faf7f4;
+    }
+    :global(.diag-choice.is-selected),
+    :global(.diag-choice.is-checked) {
+      border-color: var(--bronze);
+      background: #faf7f4;
+    }
+  
+    :global(.diag-nav) {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    :global(.diag-nav__back) {
+      font-size: 0.85rem;
+      color: #888;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem 0;
+      text-decoration: underline;
+    }
+    :global(.diag-nav__back:hover) { color: #555; }
+    :global(.diag-nav__next) {
+      margin-left: auto;
+      padding: 0.75rem 2rem;
+      background: var(--bronze);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius, 2px);
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    :global(.diag-nav__next:disabled) {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  
+    :global(.diag-result) {
+      text-align: center;
+    }
+    :global(.diag-result__label) {
+      font-size: 0.85rem;
+      color: var(--bronze);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.75rem;
+    }
+    :global(.diag-result__title) {
+      font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+      margin-bottom: 1rem;
+    }
+    :global(.diag-result__message) {
+      font-size: 0.95rem;
+      line-height: 1.8;
+      color: #555;
+      margin-bottom: 2.5rem;
+    }
+  
+    :global(.diag-result__cards) {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2.5rem;
+      text-align: left;
+    }
+    :global(.diag-card) {
+      border: 1px solid var(--gray);
+      
+      padding: 1.5rem;
+    }
+    :global(.diag-card__type) {
+      font-size: 0.75rem;
+      color: var(--bronze);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+    }
+    :global(.diag-card__title) {
+      font-size: 1rem;
+      font-weight: bold;
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+    :global(.diag-card__btn) {
+      display: block;
+      text-align: center;
+      padding: 0.65rem 1rem;
+      border: 1px solid var(--red);
+      color: var(--red);
+      font-size: 0.85rem;
+      text-decoration: none;
+      border-radius: var(--radius, 2px);
+      transition: background 0.2s, color 0.2s;
+    }
+    :global(.diag-card__btn:hover) {
+      background: var(--bronze);
+      color: #fff;
+    }
+  
+    :global(.diag-result__retry) {
+      font-size: 0.85rem;
+      color: #888;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+
+</BaseLayout>

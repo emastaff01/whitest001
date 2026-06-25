@@ -26,7 +26,7 @@ export const headerNav: NavLink[] = [
   { label: 'プラン', labelEn: 'PLAN', path: '/plan' },
   { label: 'フェア', labelEn: 'FAIR', path: '/fair' },
   { label: 'レポート', labelEn: 'REPORT', path: '/report' },
-  { label: 'アクセス', labelEn: 'ACCESS', path: '/access' },
+  { label: '当日までの流れ', labelEn: 'SCHEDULE', path: '/schedule' },
 ];
 
 // 全ページのサイトマップ（フッター・モバイルドロワーの全項目用）
@@ -45,6 +45,7 @@ export const navGroups: NavGroup[] = [
       { label: 'プラン', labelEn: 'PLAN', path: '/plan' },
       { label: 'ブライダルフェア', labelEn: 'FAIR', path: '/fair' },
       { label: 'ウェディングレポート', labelEn: 'REPORT', path: '/report' },
+      { label: '当日までの流れ', labelEn: 'SCHEDULE', path: '/schedule' },
     ],
   },
   {
