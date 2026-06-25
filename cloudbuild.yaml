@@ -1,27 +1,27 @@
 steps:
-- name: 'gcr.io/cloud-builders/docker'
-args:
-  - 'build'
-  - '-t'
-  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
-  # --build-arg で環境変数をDockerfileに渡す
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_API_KEY=$_PUBLIC_FIREBASE_API_KEY'
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_AUTH_DOMAIN=$_PUBLIC_FIREBASE_AUTH_DOMAIN'
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_PROJECT_ID=$_PUBLIC_FIREBASE_PROJECT_ID'
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_STORAGE_BUCKET=$_PUBLIC_FIREBASE_STORAGE_BUCKET'
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'
-  - '--build-arg'
-  - 'PUBLIC_FIREBASE_APP_ID=$_PUBLIC_FIREBASE_APP_ID'
-  - '--build-arg'
-  - 'PUBLIC_SITE_URL=$_PUBLIC_SITE_URL'
-  - '--build-arg'
-  - 'PUBLIC_BASE_PATH='
-  - '.'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+      # --build-arg で環境変数をDockerfileに渡す
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_API_KEY=$_PUBLIC_FIREBASE_API_KEY'
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_AUTH_DOMAIN=$_PUBLIC_FIREBASE_AUTH_DOMAIN'
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_PROJECT_ID=$_PUBLIC_FIREBASE_PROJECT_ID'
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_STORAGE_BUCKET=$_PUBLIC_FIREBASE_STORAGE_BUCKET'
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'
+      - '--build-arg'
+      - 'PUBLIC_FIREBASE_APP_ID=$_PUBLIC_FIREBASE_APP_ID'
+      - '--build-arg'
+      - 'PUBLIC_SITE_URL=$_PUBLIC_SITE_URL'
+      - '--build-arg'
+      - 'PUBLIC_BASE_PATH='
+      - '.'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
@@ -38,13 +38,10 @@ args:
       - 'asia-northeast1'
       - '--platform'
       - 'managed'
-
 images:
   - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
-
 options:
   logging: CLOUD_LOGGING_ONLY
-
 substitutions:
   # デフォルト値は空。実際の値はCloud Consoleのトリガー設定で入力する
   _PUBLIC_FIREBASE_API_KEY: ''
