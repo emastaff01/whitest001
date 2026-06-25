@@ -24,3 +24,6 @@ steps:
 
 images:
   - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
