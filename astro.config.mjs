@@ -9,9 +9,9 @@ import { loadEnv } from 'vite'; // .env を読むための関数（astro.config 
 const env = loadEnv(process.env.NODE_ENV ?? '', process.cwd(), '');
 
 // サイトの origin（ホスト）。.env の PUBLIC_SITE_URL を優先、無ければテストURL。
-const SITE = env.PUBLIC_SITE_URL || 'https://ema-run-665477084949.asia-northeast1.run.app';
+const SITE = env.PUBLIC_SITE_URL;
 // base（サブディレクトリ）。.env の PUBLIC_BASE_PATH を優先、無ければ /test-whi。
-const BASE = env.PUBLIC_BASE_PATH || '/test-whi';
+const BASE = env.PUBLIC_BASE_PATH || '';
 
 export default defineConfig({
   // site: このサイトが最終的に公開される「土台のURL」。
