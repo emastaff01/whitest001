@@ -11,6 +11,8 @@ import { getSiteSettings } from '../lib/getSiteSettings';
 import Header from '../components/common/Header.astro';
 import Footer from '../components/common/Footer.astro';
 import '../styles/global.css';
+ // Firestore からデザイン設定を取得する（失敗しても null になるだけでビルドは止まらない）
+import { getDesignSettings } from '../lib/firestore';
 
 // 各ページから渡せる項目（プロパティ）を定義
 interface Props {
@@ -97,6 +99,8 @@ const structuredData = {
   if (logoURL) {
     organizationData.logo = { '@type': 'ImageObject', url: logoURL };
   }
+ 
+  const design = await getDesignSettings().catch(() => null);
   ---
 
 <!doctype html>
@@ -171,6 +175,21 @@ const structuredData = {
         </>
       )
     }
+    
+    {/* Firestore にデザイン設定が保存されている場合だけ CSS変数を上書きする */}
+    {/* design が null（未設定・取得失敗）のときはこのブロック全体が出力されない */}
+    {design && (
+      <style set:html={`
+        :root {
+          --bronze: ${design.colorBronze} !important;
+          --green: ${design.colorGreen} !important;
+          --radius: ${
+            design.buttonShape === 'pill'    ? '9999px' :
+            design.buttonShape === 'rounded' ? '4px'    : '0px'
+          } !important;
+        }
+      `} />
+    )}
   </head>
   <body>
     {showChrome && <Header />}
