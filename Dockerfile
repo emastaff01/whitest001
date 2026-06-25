@@ -1,4 +1,5 @@
 # ── Stage 1: Astro ビルド ──────────────────────────
+# update: refresh Firebase API key
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
