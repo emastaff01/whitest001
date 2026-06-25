@@ -1,0 +1,316 @@
+---
+// =============================================================
+// src/pages/news/[id].astro （お知らせ詳細・読み物型）
+// -------------------------------------------------------------
+// URL: /test-whi/news/[id]/
+// ・getStaticPaths() で全お知らせを静的生成。
+// ・キャッチ画像(thumbnail)は任意なので、ある時だけヒーローを出す。
+// ・構造化データ Article を出力（report/[id].astro と同じ作法）。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getPosts } from '../../lib/getPosts';
+import { getSiteSettings } from '../../lib/getSiteSettings';
+import { url } from '../../lib/url';
+import { getTaxonomyMap } from '../../lib/getTaxonomies'; // id→ラベルの早見表
+import type { Post } from '../../types';
+
+// 公開中の全お知らせIDを静的生成
+export async function getStaticPaths() {
+  const posts = getPosts(); // publishedAt 降順（新しい→古い）で並んでいる
+  return posts.map((post, index) => ({
+    params: { id: post.id },
+    props: {
+      post,
+      // 配列は降順。1つ前(index-1)＝より新しい記事、1つ後(index+1)＝より古い記事
+      // 端（最新・最古）では存在しない側が undefined になる
+      newerPost: posts[index - 1], // 最新記事のときは posts[-1] ＝ undefined
+      olderPost: posts[index + 1], // 最古記事のときは undefined
+    },
+  }));
+}
+
+interface Props {
+  post: Post;
+  newerPost?: Post; // より新しいお知らせ（無い時もある＝任意）
+  olderPost?: Post; // より古いお知らせ（無い時もある＝任意）
+}
+const { post, newerPost, olderPost } = Astro.props;
+const settings = getSiteSettings();
+
+// この記事のカテゴリーラベル（categoryId → ラベル。未設定・未知idなら undefined＝表示しない）
+const categoryMap = getTaxonomyMap('news-category');
+const categoryLabel = post.categoryId ? categoryMap.get(post.categoryId)?.label : undefined;
+
+// base 付きパス（他ページと同じ作法）
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 'YYYY-MM-DD' → 'YYYY.MM.DD'
+const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
+
+// キャッチ画像（任意）。ある時だけヒーローを出す。
+const heroJpg = post.thumbnail ? toAssetPath(post.thumbnail.src) : '';
+const heroWebp = post.thumbnail ? toWebpPath(post.thumbnail.src) : '';
+
+// OG画像：キャッチ画像→無ければサイトロゴにフォールバック
+const ogImage = post.thumbnail?.src ?? settings.logo;
+
+// ---- 構造化データ（Article）----
+// 絶対URL(https://)が必要。report と同じく SITE_URL を基準に組み立てる。
+// origin（ホスト）だけを正にする。パス(/test-whi)は base 側で管理する
+const SITE_URL =
+  import.meta.env.PUBLIC_SITE_URL ??
+  'https://ema-run-665477084949.asia-northeast1.run.app';
+const pageUrl = new URL(url(`/news/${post.id}/`), SITE_URL).href;
+const homeUrl = new URL(`${base}/`, SITE_URL).href;
+
+// Article の image：キャッチ画像→無ければロゴ→両方無ければ image キーを出さない
+let ldImage: string | undefined;
+if (post.thumbnail) {
+  ldImage = new URL(toAssetPath(post.thumbnail.src), SITE_URL).href;
+} else if (settings.logo) {
+  ldImage = new URL(toAssetPath(settings.logo), SITE_URL).href;
+}
+
+// 発行元ロゴ（任意）。ある時だけ logo を後付けする（report と同じ作法）。
+const absoluteLogoUrl = settings.logo
+  ? new URL(toAssetPath(settings.logo), SITE_URL).href
+  : undefined;
+
+const publisher: Record<string, unknown> = {
+  '@type': 'Organization',
+  name: settings.siteName,
+  url: homeUrl,
+};
+if (absoluteLogoUrl) {
+  publisher.logo = { '@type': 'ImageObject', url: absoluteLogoUrl };
+}
+
+// 'YYYY-MM-DD' → ISO8601＋JST(+09:00)。report と同じヘルパ。
+const toJstDateTime = (date: string): string =>
+  date.includes('T') ? date : `${date}T00:00:00+09:00`;
+
+const articleLd: Record<string, unknown> = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: post.title,
+  description: post.body.slice(0, 120),
+  mainEntityOfPage: { '@type': 'WebPage', '@id': pageUrl },
+  author: { '@type': 'Organization', name: settings.siteName, url: homeUrl },
+  publisher,
+};
+if (ldImage) {
+  articleLd.image = ldImage; // 画像がある時だけ image を出す
+}
+// publishedAt は必須なので、公開日・更新日は常に出力する
+const published = toJstDateTime(post.publishedAt);
+articleLd.datePublished = published;
+articleLd.dateModified = published;
+---
+
+<BaseLayout
+  title={`${post.title}｜お知らせ｜ホワイトハウス伊万里`}
+  description={post.body.slice(0, 100)}
+  ogImage={ogImage}
+>
+  {/* 構造化データ(Article)。画面には表示されない */}
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(articleLd)} />
+
+  <article class="news-detail">
+    {/* ヒーロー画像：キャッチ画像がある時だけ表示 */}
+    {post.thumbnail && (
+      <div class="news-detail__hero">
+        <picture>
+          <source type="image/webp" srcset={heroWebp} />
+          <img
+            src={heroJpg}
+            alt={post.thumbnail.alt}
+            width="1600"
+            height="900"
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
+          />
+        </picture>
+      </div>
+    )}
+
+    <div class="news-detail__inner">
+      <header class="news-detail__header">
+        <p class="news-detail__overline">NEWS</p>
+        <p class="news-detail__meta">
+          <span class="news-detail__date">{toDisplayDate(post.publishedAt)}</span>
+          {categoryLabel && (
+            <span class="news-detail__category">{categoryLabel}</span>
+          )}
+        </p>
+        <h1 class="news-detail__title">{post.title}</h1>
+      </header>
+
+      {/* 本文。改行を活かすため CSS で white-space: pre-line */}
+      <div class="news-detail__body">
+        <p>{post.body}</p>
+      </div>
+
+      {/* 前後ナビ：新しい／古いお知らせへ。端では存在する側だけ表示する */}
+      {(newerPost || olderPost) && (
+        <nav class="news-detail__nav" aria-label="お知らせの前後ナビゲーション">
+          {newerPost && (
+            <a class="news-detail__nav-link news-detail__nav-link--newer" href={url(`/news/${newerPost.id}/`)}>
+              <span class="news-detail__nav-label">← 前のお知らせ</span>
+              <span class="news-detail__nav-title">{newerPost.title}</span>
+            </a>
+          )}
+          {olderPost && (
+            <a class="news-detail__nav-link news-detail__nav-link--older" href={url(`/news/${olderPost.id}/`)}>
+              <span class="news-detail__nav-label">次のお知らせ →</span>
+              <span class="news-detail__nav-title">{olderPost.title}</span>
+            </a>
+          )}
+        </nav>
+      )}
+      
+      <p class="news-detail__back">
+        <a href={url('/news/')}>← お知らせ一覧に戻る</a>
+      </p>
+    </div>
+  </article>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .news-detail {
+    background-color: var(--white);
+  }
+  .news-detail__hero {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-top: clamp(40px, 5vw, 64px);
+  }
+  .news-detail__hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .news-detail__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-block: clamp(48px, 6vw, 80px);
+  }
+  .news-detail__header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .news-detail__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 20px;
+  }
+  .news-detail__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin-bottom: 16px;
+  }
+  .news-detail__date {
+    font-family: var(--font-en-display);
+    font-size: 1.1rem;
+    color: var(--charcoal);
+    letter-spacing: 0.02em;
+  }
+  .news-detail__category {
+    font-family: var(--font-jp-sans);
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
+    color: var(--green);
+    border: 0.5px solid var(--hairline-green);
+    padding: 2px 10px;
+  }
+  .news-detail__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+  }
+  .news-detail__body {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+    white-space: pre-line;
+  }
+  .news-detail__back {
+    margin-top: 64px;
+    text-align: center;
+  }
+  .news-detail__back a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .news-detail__back a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .news-detail__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 24px;
+    margin-top: 56px;
+    padding-top: 32px;
+    border-top: 0.5px solid var(--hairline-green);
+  }
+  .news-detail__nav-link {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 48%;
+  }
+  .news-detail__nav-link--older {
+    margin-inline-start: auto;
+    text-align: right;
+  }
+  .news-detail__nav-label {
+    font-family: var(--font-jp-sans);
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    color: var(--green);
+  }
+  .news-detail__nav-title {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--dark-gray);
+    transition: color 0.2s ease;
+  }
+  .news-detail__nav-link:hover .news-detail__nav-title {
+    color: var(--charcoal);
+  }
+  @media (max-width: 600px) {
+    .news-detail__nav {
+      flex-direction: column;
+    }
+    .news-detail__nav-link {
+      max-width: 100%;
+    }
+    .news-detail__nav-link--older {
+      margin-inline-start: 0;
+      text-align: left;
+    }
+  }
+</style>

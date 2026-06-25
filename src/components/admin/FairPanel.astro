@@ -1,0 +1,1104 @@
+---
+// =============================================================
+// src/components/admin/FairPanel.astro
+// -------------------------------------------------------------
+// 管理画面「フェア」タブ。
+// 画面構成:
+//   ・一覧ビュー：タイトルだけの行を並べる。行クリックで編集ビューへ。
+//   ・編集ビュー：1件だけ表示。「一覧に戻る」で戻る／「Firestore に保存」で確定。
+//   ・並べ替えモード：一覧の「並べ替える」ボタンで切替。モード中だけ
+//     行がドラッグ専用になり（クリックで編集に飛ばない）、≡ で並べ替え。
+// データの流れ:
+//   ・表示は常に1件（編集ビュー）。harvest/populate は editingIndex の1件だけ。
+//   ・保存は working 全件が対象（戻る/保存の前に harvest して working を最新化）。
+//   ・サムネ欄は「表示＝ファイル名／保存＝フルパス（data-fullpath）」、alt はタイトル自動。
+// =============================================================
+
+import fs from 'node:fs';
+
+// 画像ピッカー用の一覧をビルド時に作る（public/images/fairs/ の .jpg を列挙）。
+const FAIR_IMG_DIR = 'public/images/fairs';
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // 末尾スラッシュ除去（例 '/test-whi'）
+let fairImages: { value: string; url: string }[] = [];
+if (fs.existsSync(FAIR_IMG_DIR)) {
+  fairImages = fs
+    .readdirSync(FAIR_IMG_DIR)
+    .filter((f) => f.toLowerCase().endsWith('.jpg'))
+    .sort()
+    .map((f) => ({
+      value: `/images/fairs/${f}`,
+      url: `${BASE}/images/fairs/${f}`,
+    }));
+}
+---
+
+<section class="adm-panel" data-panel="fair" hidden>
+  <header class="adm-panel__head">
+    <h2 class="adm-panel__title">フェア管理 
+    <span id="fair-count" class="adm-count"></span>
+    <div class="adm-toolbar">
+      <button type="button" id="fair-add-btn" class="adm-btn adm-btn--primary">＋ 新規フェアを追加</button>
+      <button type="button" id="fair-export-btn" class="adm-btn adm-btn--export">Firestore に保存</button>
+    </div>
+    </h2>
+    <p class="adm-lead">
+      ブライダルフェアの管理ページ
+    </p>
+    
+    <p id="fair-status" class="adm-status"></p>
+  </header>
+  
+  <div id="fair-editor"></div>
+
+  <!-- 画像ピッカー（パネルに1つだけ。各カードの「画像を選ぶ」から共用する） -->
+  <div id="fair-picker" class="adm-picker" hidden>
+    <div class="adm-picker__backdrop" data-picker-close></div>
+    <div class="adm-picker__panel" role="dialog" aria-modal="true" aria-label="画像を選択">
+      <div class="adm-picker__head">
+        <h3 class="adm-picker__title">画像を選ぶ（フェア）</h3>
+        <button type="button" class="adm-btn adm-btn--mini" data-picker-close>閉じる</button>
+      </div>
+      <div id="fair-picker-grid" class="adm-picker__grid"></div>
+    </div>
+  </div>
+
+<!-- ビルド時に public/images/fairs/ から作った画像一覧（value=保存値 / url=表示用） -->
+    <script type="application/json" id="fair-image-list" is:inline set:html={JSON.stringify(fairImages)}></script>
+  </section>
+  
+  
+<script>
+  import type { Fair, Taxonomy, FairSlotStatus } from '../../types';
+  import { linesToArr, arrToLines, countLabel, makeDocId } from '../../lib/admin';
+  // getTaxonomiesFromDb を追加：チェックボックスの選択肢（fair-tags マスター）を読む
+  import { getFairsFromDb, saveFairToDb, deleteFairFromDb, getTaxonomiesFromDb } from '../../lib/firestore';
+  import { auth } from '../../lib/firebase';
+  import { onAuthStateChanged } from 'firebase/auth';
+  import Sortable from 'sortablejs'; // 並べ替え（ドラッグ＆ドロップ）。管理画面でのみ読み込む
+
+  // 画像未選択時の既定サムネイル（公開サイトにもこの画像が出る）
+  const NO_IMAGE = '/images/noimage.jpg';
+
+  // フェアの時間枠1つあたりの既定の定員（組数）。
+  // 既存データに capacity が無いときの補完値にも、新規枠の初期値にも使う。
+  const DEFAULT_CAPACITY = 3;
+
+  // 残り組数から空き状況（◎△×）を決める。
+  //   残0 → full（×満席） / 残1〜2 → few（△残りわずか） / 残3以上 → available（◎空きあり）
+  // status は capacity・booked から導く「派生値」。normalize と harvest で必ずこの関数で計算し、
+  // 保存値の slot.status にもこれを入れる（公開側 fair/[id] は既存どおり slot.status を読むだけで動く）。
+  const statusFromRemaining = (remaining: number): FairSlotStatus =>
+    remaining <= 0 ? 'full' : remaining <= 2 ? 'few' : 'available';
+
+  const init = (): void => {
+    const container = document.querySelector<HTMLElement>('#fair-editor');
+    const addBtn = document.querySelector<HTMLButtonElement>('#fair-add-btn');
+    const exportBtn = document.querySelector<HTMLButtonElement>('#fair-export-btn');
+    const statusEl = document.querySelector<HTMLElement>('#fair-status');
+    if (!container || !addBtn || !exportBtn || !statusEl) return;
+
+    let working: Fair[] = [];
+    let savedIds = new Set<string>();
+    // 公開状態の「最後に読み込み／保存した時点」のスナップショット（id→公開中か）。
+    // 保存時に「表示↔非表示が変わったフェア」を洗い出して確認ポップアップを出すために使う。
+    let savedPub = new Map<string, boolean>();
+
+    // 「最後に読み込み／保存した時点」の各フェアの中身スナップショット（id→{内容文字列, タイトル}）。
+    // 今の working と見比べて「変更されたフェア」を特定するために使う。
+    let savedSnap = new Map<string, { content: string; title: string }>();
+    // 同じく、保存／読み込み時点の並び順（id を連結した文字列）。表示順だけ変わった検知に使う。
+    let savedOrderSig = '';
+
+    // オブジェクトのキー順に依存せず比較できるよう、キーを再帰的にソートして JSON 化する。
+    // （harvest がプロパティを入れ直すとキー順が変わり得るため、素の JSON.stringify では誤検知する）
+    const sortedJson = (obj: unknown): string => {
+      const sortKeys = (x: unknown): unknown => {
+        if (Array.isArray(x)) return x.map(sortKeys);
+        if (x !== null && typeof x === 'object') {
+          const o = x as Record<string, unknown>;
+          const out: Record<string, unknown> = {};
+          for (const k of Object.keys(o).sort()) out[k] = sortKeys(o[k]);
+          return out;
+        }
+        return x;
+      };
+      return JSON.stringify(sortKeys(obj));
+    };
+
+    // 比較用の「中身」文字列。sortOrder（並び順）は別枠で見るので除外、alt はタイトルからの自動派生なので除外。
+    // ＝こうしないと「開いただけ」「並べ替えただけ」で中身が変わったと誤検知してしまう。
+    const contentOf = (f: Fair): string => {
+      const { sortOrder, thumbnail, ...rest } = f;
+      void sortOrder;
+      return sortedJson({ ...rest, thumbnail: { src: thumbnail.src } });
+    };
+
+    // 今の working を「保存済み」として記録する（読み込み後・保存成功後に呼ぶ）。
+    const snapshotSaved = (): void => {
+      savedSnap = new Map(
+        working.map((f): [string, { content: string; title: string }] => [
+          f.id,
+          { content: contentOf(f), title: f.title },
+        ])
+      );
+      savedOrderSig = working.map((f) => f.id).join(',');
+    };
+
+    // 未保存のフェアのラベル一覧を返す（修正／新規作成／削除／並び替え）。空配列なら未保存なし。
+    // 「切り替わる瞬間」の通知＝index.astro のタブ切り替え確認・beforeunload から共通で使う。
+    const unsavedLabels = (): string[] => {
+      harvest(); // 編集中の1件を working に反映してから比べる（入力途中も取りこぼさない）
+      const labels: string[] = [];
+      const currentIds = new Set(working.map((f) => f.id));
+      working.forEach((f) => {
+        const snap = savedSnap.get(f.id);
+        if (!snap) labels.push(`【新規作成】${f.title || '（無題）'}`);
+        else if (snap.content !== contentOf(f)) labels.push(`【修正】${f.title || '（無題）'}`);
+      });
+      savedSnap.forEach((snap, id) => {
+        if (!currentIds.has(id)) labels.push(`【削除】${snap.title || id}`);
+      });
+      // 追加も削除もない（メンバーが同じ）のに並び順だけ変わったら、並び替えとして1行（タイトルは出さない）
+      const sameMembers =
+        currentIds.size === savedSnap.size && [...currentIds].every((id) => savedSnap.has(id));
+      if (sameMembers && working.map((f) => f.id).join(',') !== savedOrderSig) {
+        labels.push('【並び替え】');
+      }
+      return labels;
+    };
+
+    // ※「未保存の内容があります」を status 欄に常時表示する処理は廃止した。
+    //   未保存の通知は「切り替わる瞬間」だけに出す方針:
+    //     ・一覧に戻る時       … 下の noticeUnsaved() を呼んで status に未保存内容を表示
+    //     ・並べ替えモード終了時 … 同じく noticeUnsaved() を呼ぶ
+    //     ・タブ切り替え時     … index.astro の confirmLeave が unsavedLabels() を呼んで確認ポップアップを出す
+    //     ・ページ離脱時       … 下の beforeunload がブラウザ標準の警告を出す
+    //   そのため unsavedLabels() は残す（上記の各所から呼ばれる）。
+
+    // 未保存があれば status 欄に内容を出す。無ければ status を空にする。
+    // 「一覧に戻る瞬間」だけ呼ぶ（入力のたびには呼ばない＝編集中は静かなまま）。
+    const noticeUnsaved = (): void => {
+      const labels = unsavedLabels();
+      if (labels.length === 0) {
+        setStatus('', '');
+        return;
+      }
+      setStatus('未保存の内容があります。\n' + labels.join('\n'), 'warn');
+    };
+
+    // タグのチェックボックス選択肢（fair-tags の公開中マスター）。load() で読み込む。
+    let tagChoices: Taxonomy[] = [];
+    // 体験できることのチェックボックス選択肢（fair-contents の公開中マスター）。load() で読み込む。
+    let contentChoices: Taxonomy[] = [];
+    // 並べ替え用 Sortable インスタンス。再描画のたびに作り直す（破棄→生成）。
+    let sortable: Sortable | null = null;
+
+    // ---- 画面の状態 ----
+    let view: 'list' | 'edit' = 'list'; // いま一覧か編集か
+    let editingIndex = -1;              // 編集中フェアの working 内の位置（一覧時は -1）
+    let reorderMode = false;            // 並べ替えモードON/OFF（一覧ビューでのみ意味を持つ）
+
+    // ---- セレクタ生成 ----
+    const fieldSel = (fi: number, field: string): string =>
+      `[data-fi="${fi}"][data-field="${field}"]`;
+    const daySel = (fi: number, di: number, sf: string): string =>
+      `[data-fi="${fi}"][data-di="${di}"][data-sfield="${sf}"]`;
+    const slotSel = (fi: number, di: number, si: number, sf: string): string =>
+      `[data-fi="${fi}"][data-di="${di}"][data-si="${si}"][data-sfield="${sf}"]`;
+
+    // ---- 値の読み取り ----
+    const valOf = (sel: string): string => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value.trim() : '';
+    };
+    const rawValOf = (sel: string): string => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value : '';
+    };
+    // ---- 値の書き込み ----
+    const setVal = (sel: string, v: string): void => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      if (el) el.value = v;
+    };
+
+    // 文字列を HTML に安全に埋め込む（一覧のタイトル表示用。'<' などを実体参照に変換）
+    const escapeHtml = (s: string): string =>
+      s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c)
+      );
+
+    // 保存値(base無し /images/...) → 画面表示URL(base付き)
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+    const toUrl = (src: string): string => (src ? `${BASE}${src}` : '');
+    // サムネ欄のプレビュー画像を更新（空なら src を外して隠す）
+    const setThumbPreview = (fi: number, src: string, alt: string): void => {
+      const img = container.querySelector<HTMLImageElement>(`[data-fi="${fi}"][data-thumb-preview]`);
+      if (!img) return;
+      if (src) {
+        img.src = toUrl(src);
+        img.hidden = false;
+      } else {
+        img.removeAttribute('src');
+        img.hidden = true;
+      }
+      img.alt = alt ?? '';
+    };
+
+    // ---- ファイル名 / フルパスのヘルパー ----
+    const fileNameOf = (src: string): string => src.split('/').pop() ?? '';
+    const setThumbField = (fi: number, fullPath: string): void => {
+      const input = container.querySelector<HTMLInputElement>(fieldSel(fi, 'thumbnailSrc'));
+      if (input) {
+        input.value = fileNameOf(fullPath);
+        input.dataset.fullpath = fullPath;
+      }
+      setThumbPreview(fi, fullPath, '');
+    };
+    const fullPathOf = (fi: number): string => {
+      const input = container.querySelector<HTMLInputElement>(fieldSel(fi, 'thumbnailSrc'));
+      return input?.dataset.fullpath ?? '';
+    };
+
+    // ---- 画面 → working（1件分）----
+    const harvestFair = (fair: Fair, fi: number): void => {
+      fair.id = valOf(fieldSel(fi, 'id'));
+      fair.title = valOf(fieldSel(fi, 'title'));
+      const cc = valOf(fieldSel(fi, 'catchCopy'));
+      fair.catchCopy = cc === '' ? undefined : cc;
+      fair.description = rawValOf(fieldSel(fi, 'description')).trim();
+      fair.thumbnail = {
+        src: fullPathOf(fi) || NO_IMAGE, // .value はファイル名なので data-fullpath を読む
+        alt: fair.title, // alt はタイトルを自動採用（title は上で取り込み済み）
+      };
+      const dur = valOf(fieldSel(fi, 'duration'));
+      fair.duration = dur === '' ? undefined : dur;
+      const rfi = valOf(fieldSel(fi, 'reservationFormId'));
+      // 空、または初期値（このフェアのIDのまま）のときは保存しない（undefined）。
+      // 詳細ページが `reservationFormId ?? fair.id` でフォールバックするので、同じ値の二重持ちを避けられる。
+      fair.reservationFormId = rfi === '' || rfi === fair.id ? undefined : rfi;
+      const so = valOf(fieldSel(fi, 'sortOrder'));
+      const soNum = Number(so);
+      fair.sortOrder = so === '' || Number.isNaN(soNum) ? undefined : soNum;
+      // セレクトの値（published/hidden）を真偽に変換。'published' のときだけ true。
+      fair.isPublished = valOf(fieldSel(fi, 'isPublished')) === 'published';
+
+      // タグ：この fair のチェック済みボックスから id を集める（複数選択）
+      const tagIds = Array.from(
+        container.querySelectorAll<HTMLInputElement>(
+          `input[type="checkbox"][data-fi="${fi}"][data-tag-id]`
+        )
+      )
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.dataset.tagId ?? '');
+      fair.tagIds = tagIds.length ? tagIds : undefined; // 0件なら undefined（保存時に省かれる）
+      const benefits = linesToArr(rawValOf(fieldSel(fi, 'benefits')));
+      fair.benefits = benefits.length ? benefits : undefined;
+      const cbenefit = linesToArr(rawValOf(fieldSel(fi, 'contractBenefits')));
+      fair.contractBenefits = cbenefit.length ? cbenefit : undefined;
+      // 体験できること：チェック済みボックスから id を集める（複数選択）
+      const contentIds = Array.from(
+        container.querySelectorAll<HTMLInputElement>(
+          `input[type="checkbox"][data-fi="${fi}"][data-content-id]`
+        )
+      )
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.dataset.contentId ?? '');
+      fair.contentIds = contentIds.length ? contentIds : undefined; // 0件なら undefined（保存時に省かれる）
+
+      fair.schedule.forEach((day, di) => {
+        day.date = valOf(daySel(fi, di, 'date'));
+        day.times.forEach((slot, si) => {
+          slot.time = valOf(slotSel(fi, di, si, 'time'));
+          // 定員（capacity）と予約済み（booked）を数値で取り込む。
+          // 空欄なら「未設定」とみなして既定値に寄せる（capacity=既定値 / booked=0）。
+          // Math.floor で整数化、Math.max(0, …) でマイナスを防ぐ。
+          const capStr = valOf(slotSel(fi, di, si, 'capacity'));
+          const bookedStr = valOf(slotSel(fi, di, si, 'booked'));
+          const capNum = Number(capStr);
+          const bookedNum = Number(bookedStr);
+          slot.capacity =
+            capStr === '' || Number.isNaN(capNum) ? DEFAULT_CAPACITY : Math.max(0, Math.floor(capNum));
+          slot.booked =
+            bookedStr === '' || Number.isNaN(bookedNum) ? 0 : Math.max(0, Math.floor(bookedNum));
+          // status は手入力ではなく、残数（capacity − booked）から毎回計算した結果を保存する。
+          slot.status = statusFromRemaining(slot.capacity - slot.booked);
+        });
+      });
+    };
+    // 編集中の1件だけを working に退避する（一覧・並べ替え時はカードが無いので何もしない）
+    const harvest = (): void => {
+      if (view !== 'edit' || editingIndex < 0) return;
+      const fair = working[editingIndex];
+      if (fair) harvestFair(fair, editingIndex);
+    };
+
+    // ---- working → 画面（1件分）----
+    const populateFair = (fair: Fair, fi: number): void => {
+      setVal(fieldSel(fi, 'id'), fair.id);
+      setVal(fieldSel(fi, 'title'), fair.title);
+      setVal(fieldSel(fi, 'catchCopy'), fair.catchCopy ?? '');
+      setVal(fieldSel(fi, 'description'), fair.description);
+      setThumbField(fi, fair.thumbnail.src); // 表示=ファイル名/保存=フルパス/プレビュー更新
+      setVal(fieldSel(fi, 'duration'), fair.duration ?? '');
+      // 初期値はこのフェアのID。カスタム値があればそれを表示（空欄ではなくIDを既定にする）。
+      setVal(fieldSel(fi, 'reservationFormId'), fair.reservationFormId ?? fair.id);
+      setVal(fieldSel(fi, 'sortOrder'), fair.sortOrder === undefined ? '' : String(fair.sortOrder));
+      // 真偽 → セレクトの値（published/hidden）。false は「非表示」。
+      setVal(fieldSel(fi, 'isPublished'), fair.isPublished ? 'published' : 'hidden');
+      // タグ：fair.tagIds に含まれる id のチェックを復元
+      {
+        const selected = new Set(fair.tagIds ?? []);
+        container
+          .querySelectorAll<HTMLInputElement>(
+            `input[type="checkbox"][data-fi="${fi}"][data-tag-id]`
+          )
+          .forEach((cb) => {
+            cb.checked = selected.has(cb.dataset.tagId ?? '');
+          });
+      }
+      setVal(fieldSel(fi, 'benefits'), arrToLines(fair.benefits));
+      setVal(fieldSel(fi, 'contractBenefits'), arrToLines(fair.contractBenefits));
+      // 体験できること：fair.contentIds に含まれる id のチェックを復元
+      {
+        const selectedContents = new Set(fair.contentIds ?? []);
+        container
+          .querySelectorAll<HTMLInputElement>(
+            `input[type="checkbox"][data-fi="${fi}"][data-content-id]`
+          )
+          .forEach((cb) => {
+            cb.checked = selectedContents.has(cb.dataset.contentId ?? '');
+          });
+      }
+      fair.schedule.forEach((day, di) => {
+        setVal(daySel(fi, di, 'date'), day.date);
+        day.times.forEach((slot, si) => {
+          setVal(slotSel(fi, di, si, 'time'), slot.time);
+          // 定員／予約済みを数値入力へ流し込む（normalize 済みなので必ず数値が入っている）。
+          setVal(slotSel(fi, di, si, 'capacity'), String(slot.capacity ?? DEFAULT_CAPACITY));
+          setVal(slotSel(fi, di, si, 'booked'), String(slot.booked ?? 0));
+          // 「残り○組 ◎△×」の表示を、いま入れた値から計算して初期表示する。
+          updateSlotStatusView(fi, di, si);
+        });
+      });
+    };
+    // 編集中の1件だけを画面に流し込む
+    const populateOne = (fi: number): void => {
+      const fair = working[fi];
+      if (fair) populateFair(fair, fi);
+    };
+
+    // タグのチェックボックス群を組み立てる（fair-tags マスター由来）。
+    // 値はHTML属性に直接入れず、data-tag-id だけ持たせて populate() でチェック状態を流し込む。
+    const tagCheckboxes = (fi: number): string => {
+      if (tagChoices.length === 0) {
+        // マスター未登録のときの案内（選択肢ゼロ＝チェック不能なので理由を出す）
+        return `<p class="adm-hint">選択肢がありません。「タグ／カテゴリー管理」→「フェアのタグ」で追加してください。</p>`;
+      }
+      const items = tagChoices
+        .map(
+          (t) => `
+          <label class="adm-radio">
+            <input type="checkbox" data-fi="${fi}" data-tag-id="${t.id}" />
+            <span>${t.label}</span>
+          </label>`
+        )
+        .join('');
+      return `<div class="adm-radios" data-fi="${fi}" data-field="tags">${items}</div>`;
+    };
+    // 体験できることのチェックボックス群（fair-contents マスター由来）。
+    // 値はHTML属性に直接入れず、data-content-id だけ持たせて populate() でチェック状態を流し込む。
+    const contentCheckboxes = (fi: number): string => {
+      if (contentChoices.length === 0) {
+        return `<p class="adm-hint">選択肢がありません。「タグ／カテゴリー管理」→「フェアの体験できること」で追加してください。</p>`;
+      }
+      const items = contentChoices
+        .map(
+          (t) => `
+          <label class="adm-radio">
+            <input type="checkbox" data-fi="${fi}" data-content-id="${t.id}" />
+            <span>${t.label}</span>
+          </label>`
+        )
+        .join('');
+      return `<div class="adm-radios" data-fi="${fi}" data-field="contents">${items}</div>`;
+    };
+    // ---- HTML 組み立て ----
+    // 所要時間の選択肢（約1時間〜約3時間30分・15分刻み）。
+    // value=表示文字列をそのまま保存する（fair.duration は文字列型なので harvest/populate はそのまま使える）。
+    const DURATION_OPTIONS = [
+      '約1時間', '約1時間15分', '約1時間30分', '約1時間45分',
+      '約2時間', '約2時間15分', '約2時間30分', '約2時間45分',
+      '約3時間', '約3時間15分', '約3時間30分',
+    ];
+    // 所要時間 select の <option> 群を作る。先頭に空（指定しない）を置くので「任意」のまま使える。
+    // 値の選択は populate() の setVal が行う（ここでは selected を付けない＝既存の流儀に合わせる）。
+    const durationOptionsHtml = (): string =>
+      ['<option value="">（指定しない）</option>']
+        .concat(DURATION_OPTIONS.map((d) => `<option value="${d}">${d}</option>`))
+        .join('');
+
+    // 開催時間の選択肢（10:00〜18:00・15分刻み）。"10:00","10:15",… の文字列を作る。
+    // value=表示文字列をそのまま保存するので harvest/populate は無変更（slot.time に "10:00" 等が入る）。
+    const TIME_OPTIONS: string[] = (() => {
+      const out: string[] = [];
+      for (let h = 10; h <= 18; h++) {
+        for (let m = 0; m < 60; m += 15) {
+          if (h === 18 && m > 0) break; // 18:00 で打ち切り（18:15 以降は作らない）
+          out.push(`${h}:${String(m).padStart(2, '0')}`); // 分は2桁ゼロ埋め（0→"00"）
+        }
+      }
+      return out;
+    })();
+    // 開催時間 select の <option> 群。先頭に空（未選択）を置く。値の選択は populate() の setVal が行う。
+    const timeOptionsHtml = (): string =>
+      ['<option value="">（時間を選択）</option>']
+        .concat(TIME_OPTIONS.map((t) => `<option value="${t}">${t}</option>`))
+        .join('');
+
+    const slotRow = (fi: number, di: number, si: number): string => `
+      <div class="adm-slot">
+        <select data-fi="${fi}" data-di="${di}" data-si="${si}" data-sfield="time">${timeOptionsHtml()}</select>
+        <label class="adm-slot__num">定員
+          <input type="number" min="0" step="1" data-fi="${fi}" data-di="${di}" data-si="${si}" data-sfield="capacity" />
+        </label>
+        <label class="adm-slot__num">予約済
+          <input type="number" min="0" step="1" data-fi="${fi}" data-di="${di}" data-si="${si}" data-sfield="booked" />
+        </label>
+        <span class="adm-slot__status" data-fi="${fi}" data-di="${di}" data-si="${si}">残り <span data-slot-remaining>-</span> 組 <span class="fair-list__mark" data-slot-mark>&#9678;</span></span>
+        <button type="button" class="adm-btn adm-btn--mini" data-action="del-slot" data-fi="${fi}" data-di="${di}" data-si="${si}">削除</button>
+      </div>`;
+
+    const dayBlock = (fi: number, di: number, slotCount: number): string => {
+      const slots = Array.from({ length: slotCount }, (_, si) => slotRow(fi, di, si)).join('');
+      return `
+      <div class="adm-day">
+        <div class="adm-day__head">
+          <label>開催日 <input type="date" data-fi="${fi}" data-di="${di}" data-sfield="date" /></label>
+          <button type="button" class="adm-btn adm-btn--mini" data-action="del-day" data-fi="${fi}" data-di="${di}">この日を削除</button>
+        </div>
+        <div class="adm-slots">${slots}</div>
+        <button type="button" class="adm-btn adm-btn--mini" data-action="add-slot" data-fi="${fi}" data-di="${di}">＋ 時間枠を追加</button>
+      </div>`;
+    };
+
+    const fairCard = (fair: Fair, fi: number): string => {
+      const days = fair.schedule.map((day, di) => dayBlock(fi, di, day.times.length)).join('');
+      // 予約フォームIDが「カスタム値」（空でなく、かつフェアIDと違う）のときだけ折りたたみを開いて表示する
+      const hasCustomRfid =
+        fair.reservationFormId !== undefined &&
+        fair.reservationFormId !== '' &&
+        fair.reservationFormId !== fair.id;
+      return `
+      <section class="adm-card">
+        <div class="adm-card__head">
+          <h2>No. ${fi + 1}</h2>
+          <label class="adm-title"><span class="adm-title__title">フェアタイトル</span>
+            <input type="text" data-fi="${fi}" data-field="title" placeholder="（タイトル）"/>
+          </label>
+          <label class="adm-pub"><span class="adm-pub__title">公開状態</span>
+            <select data-fi="${fi}" data-field="isPublished">
+              <option value="hidden">非表示</option>
+              <option value="published">表示</option>
+            </select>
+          </label>
+          
+        </div>
+        <label class="adm-id"><span class="adm-id__title">ID（自動発番・編集不可）</span>
+          <input type="text" data-fi="${fi}" data-field="id" readonly placeholder="（保存時に自動で付与されます）" />
+        </label>
+        <div class="adm-card__body">
+        <div class="adm-row">
+          <div class="adm-card__first">
+            
+            <label class="adm-field">
+              <span class="adm-field-title">キャッチコピー（任意）</span>
+              <input type="text" data-fi="${fi}" data-field="catchCopy" />
+            </label>
+            <label class="adm-field">
+              <span class="adm-field-title">説明文
+              </span><textarea rows="3" data-fi="${fi}" data-field="description"></textarea>
+            </label>
+            <label class="adm-field">
+            <span class="adm-field-title">所要時間（任意）</span>
+              <select data-fi="${fi}" data-field="duration">${durationOptionsHtml()}</select>
+            </label>
+          </div>
+          <div class="adm-card__second">
+            <label class="adm-field">
+              <span class="adm-field-title">サムネイル画像</span>
+            </label>
+              <div class="adm-thumb">
+                <img class="adm-thumb__preview" data-fi="${fi}" data-thumb-preview alt="" hidden />
+                <div class="adm-row">
+                <input type="text" data-fi="${fi}" data-field="thumbnailSrc" readonly placeholder="（「画像を選ぶ」から選択）" />
+                <button type="button" class="adm-btn adm-btn--mini" data-action="pick-thumb" data-fi="${fi}">画像を選ぶ</button>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+        <!-- 表示順は「並べ替え」で管理するので画面には出さない。
+             ただし値の往復（populate→harvest）に input は必要なので hidden で残す。 -->
+        <input type="hidden" data-fi="${fi}" data-field="sortOrder" />
+
+        <div class="adm-row">
+        <label class="adm-field">
+        <span class="adm-field-title">タグ（複数選択／任意）</span>
+          ${tagCheckboxes(fi)}
+        </label>
+        <label class="adm-field">
+        <span class="adm-field-title">来館特典（1行に1つ／任意）</span>
+            <textarea rows="3" data-fi="${fi}" data-field="benefits"></textarea>
+          </label>
+          <label class="adm-field">
+          <span class="adm-field-title">成約特典（1行に1つ／任意）</span>
+            <textarea rows="3" data-fi="${fi}" data-field="contractBenefits"></textarea>
+          </label>
+        </div>
+
+        <label class="adm-field">
+        <span class="adm-field-title">体験できること（複数選択／任意）</span>
+          ${contentCheckboxes(fi)}
+        </label>
+
+        <div class="adm-sched">
+          <h3>開催日程</h3>
+          ${days}
+          <button type="button" class="adm-btn" data-action="add-day" data-fi="${fi}">＋ 開催日を追加</button>
+        </div>
+
+        <details class="adm-collapse" ${hasCustomRfid ? 'open' : ''}>
+          <summary class="adm-collapse__summary">予約フォームID（通常は変更不要・クリックで開く）</summary>
+          <div class="adm-collapse__body">
+            <input type="text" data-fi="${fi}" data-field="reservationFormId" />
+            <span class="adm-hint">予約フォームに渡す識別子。初期値はこのフェアのID。分かりやすい名前（例: winter-fair）にしたいときだけ変更してください。</span>
+          </div>
+        </details>
+        <button type="button" class="adm-btn adm-btn--danger" data-action="del-fair" data-fi="${fi}">フェア削除</button>
+        </div>
+        
+      </section>`;
+    };
+
+    // ---- 一覧ビュー用：表示テキストを組み立てるヘルパー ----
+
+    // id 配列 → ラベル配列。マスター（choices）に無い id は捨てる（公開側と同じ「未知idはスキップ」）。
+    const labelsOf = (ids: string[] | undefined, choices: Taxonomy[]): string[] => {
+      if (!ids || ids.length === 0) return [];
+      return ids
+        .map((id) => choices.find((c) => c.id === id)?.label) // id をラベルに変換（無ければ undefined）
+        .filter((label): label is string => !!label);          // undefined（＝未知id）を除外
+    };
+
+    // "2026-06-21" → "6/21"。new Date は使わない（タイムゾーンで日付がズレるのを避け、文字列を分解する）。
+    const formatMD = (iso: string): string => {
+      const parts = iso.split('-'); // [年, 月, 日]
+      const m = parts[1];
+      const d = parts[2];
+      if (!m || !d) return iso; // 想定外フォーマットはそのまま返す（保険）
+      return `${Number(m)}/${Number(d)}`; // 先頭ゼロを落とす（06→6）
+    };
+
+    // 空き状況の記号とCSSクラス（公開側と同じ ◎△×）。未知の値は「空きあり」扱いにする。
+    const STATUS_MARK: Record<string, string> = { available: '◎', few: '△', full: '×' };
+    const STATUS_CLASS: Record<string, string> = {
+      available: 'is-available', few: 'is-few', full: 'is-full',
+    };
+
+    // 1つの時間枠 →「10:00 ◎」のHTML。時間はユーザー入力なので escapeHtml で安全化、記号は色分け用に span で包む。
+    const slotHtml = (slot: { time: string; status: string }): string => {
+      const mark = STATUS_MARK[slot.status] ?? '◎';
+      const cls = STATUS_CLASS[slot.status] ?? 'is-available';
+      return `<span class="fair-list__slot">${escapeHtml(slot.time)}<span class="fair-list__mark ${cls}">${mark}</span></span>`;
+    };
+
+    // 編集ビューの1つの時間枠について「残り○組 ◎△×」表示を、いま画面に入っている定員／予約済みから計算して描き直す。
+    // ※ working には触らず、表示の即時反映だけを行う軽い処理（保存は exportBtn 時の harvest が担当）。
+    const updateSlotStatusView = (fi: number, di: number, si: number): void => {
+      // harvest と同じルールで読む（空欄なら capacity=既定値 / booked=0、整数化・マイナス防止）。
+      const capStr = valOf(slotSel(fi, di, si, 'capacity'));
+      const bookedStr = valOf(slotSel(fi, di, si, 'booked'));
+      const capNum = Number(capStr);
+      const bookedNum = Number(bookedStr);
+      const cap = capStr === '' || Number.isNaN(capNum) ? DEFAULT_CAPACITY : Math.max(0, Math.floor(capNum));
+      const bk = bookedStr === '' || Number.isNaN(bookedNum) ? 0 : Math.max(0, Math.floor(bookedNum));
+      const remaining = cap - bk;
+      const status = statusFromRemaining(remaining);
+      const base = `.adm-slot__status[data-fi="${fi}"][data-di="${di}"][data-si="${si}"]`;
+      // 残り組数（マイナスは0として見せる）
+      const remEl = container.querySelector<HTMLElement>(`${base} [data-slot-remaining]`);
+      if (remEl) remEl.textContent = String(Math.max(0, remaining));
+      // ◎△× バッジ（記号＋色クラスを差し替え）
+      const markEl = container.querySelector<HTMLElement>(`${base} [data-slot-mark]`);
+      if (markEl) {
+        markEl.textContent = STATUS_MARK[status] ?? '◎';
+        markEl.className = `fair-list__mark ${STATUS_CLASS[status] ?? 'is-available'}`;
+      }
+    };
+
+    // 1日分 →「6/21 10:00◎ 13:00△」のHTML。時間が未入力（空文字）の枠は出さない。
+    const dayHtml = (day: { date: string; times: { time: string; status: string }[] }): string => {
+      const md = day.date ? escapeHtml(formatMD(day.date)) : '';
+      const slots = day.times.filter((t) => t.time !== '').map(slotHtml).join('');
+      return `<span class="fair-list__day"><span class="fair-list__md">${md}</span>${slots}</span>`;
+    };
+
+    // 開催日全体を「先頭3日＋ほかN件」のHTMLにする。日付が未入力の日は除外。
+    // ※ scheduleHtml は安全なHTML文字列を返す（中の time だけ escapeHtml 済み）ので、呼び出し側では再エスケープしない。
+    const scheduleHtml = (schedule: Fair['schedule']): string => {
+      const days = schedule.filter((d) => d.date !== ''); // 日付が空の日は出さない
+      if (days.length === 0) return '未設定';
+      const head = days.slice(0, 3).map(dayHtml).join(''); // 先頭3日
+      const rest = days.length - 3;
+      return head + (rest > 0 ? `<span class="fair-list__more">ほか${rest}件</span>` : '');
+    };
+
+    // ---- 一覧ビューの行（クリックで編集へ。data-field を持たせない＝harvest に拾われない）----
+    // 左にサムネ、右にタイトル＋公開バッジ＋開催日／所要時間／タグ／体験できること を縦に積む。
+    const fairListItem = (fair: Fair, fi: number): string => {
+      const thumbUrl = toUrl(fair.thumbnail.src);                    // base 付きの表示用URL
+      const scheduleText = scheduleHtml(fair.schedule);              // 開催日＋時間＋空き状況（先頭3日＋ほかN件）
+      const durationText = fair.duration ?? '未設定';                // 所要時間
+      const tagsText = labelsOf(fair.tagIds, tagChoices).join('、') || '未設定';        // タグ
+      const contentsText = labelsOf(fair.contentIds, contentChoices).join('、') || '未設定'; // 体験できること
+      return `
+      <li class="fair-list__row">
+        <button type="button" class="fair-list__btn" data-action="edit-fair" data-fi="${fi}">
+          <span class="fair-list__thumb">
+            <img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(fair.title)}" loading="lazy" />
+          </span>
+          <span class="fair-list__main">
+            <span class="fair-list__titlerow">
+              <span class="fair-list__no">No. ${fi + 1}</span>
+              <span class="fair-list__title">${escapeHtml(fair.title) || '（無題）'}</span>
+              <span class="fair-list__badge ${fair.isPublished ? 'is-pub' : 'is-unpub'}">${fair.isPublished ? '表示' : '非表示'}</span>
+            </span>
+            <span class="fair-list__meta"><span class="fair-list__key">開催日</span>${scheduleText}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">所要時間</span>${escapeHtml(durationText)}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">タグ</span>${escapeHtml(tagsText)}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">体験</span>${escapeHtml(contentsText)}</span>
+          </span>
+        </button>
+      </li>`;
+    };
+
+    // ---- 並べ替えモードの行（ドラッグ専用。クリックで編集に飛ばない＝<button>にしない）----
+    const reorderItem = (fair: Fair, fi: number): string => `
+      <li class="fair-reorder__item" data-reorder-index="${fi}">
+        <span class="fair-reorder__handle" aria-hidden="true">≡</span>
+        <span class="fair-reorder__no">No. ${fi + 1}</span>
+        <span class="fair-reorder__title">${escapeHtml(fair.title) || '（無題）'}</span>
+      </li>`;
+
+    // ---- 一覧ビュー全体（通常 or 並べ替えモード）----
+    const listViewHtml = (): string => {
+      if (reorderMode) {
+        const items = working.map((f, i) => reorderItem(f, i)).join('');
+        return `
+        <div class="fair-list">
+          <div class="fair-list__bar">
+            <button type="button" class="adm-btn" data-action="toggle-reorder">並べ替えを終了</button>
+            <span class="adm-hint">≡ をドラッグして表示順を入れ替え。終わったら「Firestore に保存」で確定します。</span>
+          </div>
+          <ul class="fair-reorder__list" id="fair-reorder-list">${items}</ul>
+        </div>`;
+      }
+      const items = working.map((f, i) => fairListItem(f, i)).join('');
+      const empty =
+        working.length === 0
+          ? `<p class="adm-hint">フェアがありません。「＋ 新規フェアを追加」から作成してください。</p>`
+          : '';
+      return `
+      <div class="fair-list">
+        <div class="fair-list__bar">
+          <button type="button" class="adm-btn" data-action="toggle-reorder">並べ替える</button>
+        </div>
+        <ul class="fair-list__items">${items}</ul>
+        ${empty}
+      </div>`;
+    };
+
+    // ---- 編集ビュー全体（1件のカード＋戻るボタン）----
+    const editViewHtml = (fi: number): string => `
+      <div class="fair-edit">
+        <div class="fair-edit__bar">
+          <button type="button" class="adm-btn" data-action="back-to-list">← 一覧に戻る</button>
+        </div>
+        ${fairCard(working[fi]!, fi)}
+      </div>`;
+
+    // 並べ替え一覧に Sortable を初期化（並べ替えモードのときだけ呼ぶ）。
+    const initSortable = (): void => {
+      const listEl = container.querySelector<HTMLElement>('#fair-reorder-list');
+      if (!listEl) return;
+      sortable?.destroy(); // 古いインスタンスを破棄（DOM を作り直すので二重登録を防ぐ）
+      sortable = Sortable.create(listEl, {
+        handle: '.fair-reorder__handle', // ハンドル（≡）部分だけドラッグ可能にする
+        animation: 150,
+        onEnd: (evt) => {
+          const from = evt.oldIndex;
+          const to = evt.newIndex;
+          // 位置が変わっていなければ何もしない
+          if (from === undefined || to === undefined || from === to) return;
+          const moved = working.splice(from, 1)[0]; // 動かした1件を抜き出す
+          if (!moved) return;
+          working.splice(to, 0, moved); // 新しい位置に挿し込む
+          working.forEach((f, i) => {
+            f.sortOrder = i; // 上から 0,1,2… に振り直す
+          });
+          render(); // 一覧を新しい順で描き直す（Sortable も貼り直される）
+        },
+      });
+    };
+
+    // ---- 描画（state を見て一覧/編集を出し分ける）----
+    const render = (): void => {
+      sortable?.destroy(); // どのビューでも一旦破棄。並べ替えモードのときだけ後で貼り直す
+      sortable = null;
+
+      if (view === 'edit' && editingIndex >= 0 && working[editingIndex]) {
+        container.innerHTML = editViewHtml(editingIndex);
+        populateOne(editingIndex); // 1件分だけ値を流し込む
+      } else {
+        // 編集対象が無ければ一覧に戻す（安全側）
+        view = 'list';
+        editingIndex = -1;
+        container.innerHTML = listViewHtml();
+        if (reorderMode) initSortable();
+      }
+
+      addBtn.hidden = view === 'edit'; // 編集中は「＋新規追加」を隠す（一覧でのみ追加）
+      const countEl = document.querySelector<HTMLSpanElement>('#fair-count');
+      if (countEl) countEl.textContent = countLabel(working);
+    };
+
+    const setStatus = (msg: string, kind: 'ok' | 'warn' | ''): void => {
+      statusEl.textContent = msg;
+      statusEl.className = 'adm-status' + (kind ? ' is-' + kind : '');
+    };
+
+    const blankFair = (): Fair => ({
+      id: makeDocId('f'), // 新規作成時だけ自動発番。'f'＝フェアの接頭辞。編集時はここを通らないのでIDは不変
+      title: '',
+      description: '',
+      thumbnail: { src: NO_IMAGE, alt: '' },
+      schedule: [],
+      isPublished: false,
+    });
+
+    const validate = (): string[] => {
+      const errs: string[] = [];
+      const seen = new Set<string>();
+      working.forEach((fair, i) => {
+        const n = i + 1;
+        if (fair.id === '') errs.push(`${n}件目: ID が空です`);
+        else if (seen.has(fair.id)) errs.push(`${n}件目: ID「${fair.id}」が重複しています`);
+        seen.add(fair.id);
+        if (fair.title === '') errs.push(`${n}件目: タイトルが空です`);
+        if (fair.thumbnail.src === '') errs.push(`${n}件目: サムネイル画像が未選択です`);
+        // alt はタイトル自動なので alt 単独チェックは不要
+      });
+      return errs;
+    };
+
+    // ---- 画像ピッカー（サムネ専用・1枚選択）----
+    const picker = document.querySelector<HTMLElement>('#fair-picker');
+    const pickerGrid = document.querySelector<HTMLElement>('#fair-picker-grid');
+    let pickerTargetFi = -1;
+
+    const imageListEl = document.querySelector<HTMLScriptElement>('#fair-image-list');
+    const imageList: { value: string; url: string }[] =
+      imageListEl ? JSON.parse(imageListEl.textContent ?? '[]') : [];
+
+    if (pickerGrid) {
+      pickerGrid.innerHTML = imageList
+        .map(
+          (img) => `
+        <button type="button" class="adm-picker__item" data-pick-value="${img.value}">
+          <img src="${img.url}" alt="" loading="lazy" />
+          <span class="adm-picker__name">${img.value.split('/').pop() ?? ''}</span>
+        </button>`
+        )
+        .join('');
+    }
+
+    const openPicker = (fi: number): void => {
+      if (picker) {
+        pickerTargetFi = fi;
+        picker.hidden = false;
+      }
+    };
+    const closePicker = (): void => {
+      if (picker) {
+        picker.hidden = true;
+        pickerTargetFi = -1;
+      }
+    };
+
+    if (pickerGrid) {
+      pickerGrid.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (!(el instanceof Element)) return;
+        const item = el.closest<HTMLButtonElement>('button[data-pick-value]');
+        if (!item || pickerTargetFi < 0) return;
+        const value = item.dataset.pickValue ?? '';
+        setThumbField(pickerTargetFi, value); // 表示=ファイル名/保存=フルパス/プレビュー
+        closePicker();
+      });
+    }
+
+    if (picker) {
+      picker.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (el instanceof Element && el.closest('[data-picker-close]')) closePicker();
+      });
+    }
+    // index.astro のタブ切り替えから「未保存のフェア一覧」を読めるよう、関数を window に登録する。
+    // 各パネルが自分の data-panel 名で1つずつ登録する想定（横展開時もここに倣う）。
+    const w = window as unknown as { adminDirtyReporters?: Record<string, () => string[]> };
+    w.adminDirtyReporters = w.adminDirtyReporters ?? {};
+    w.adminDirtyReporters.fair = unsavedLabels;
+    
+
+    // ページ離脱（閉じる・再読み込み・別URLへ移動）時、未保存があればブラウザ標準の警告を出す。
+    // ※文言はブラウザ仕様で固定（カスタム不可・一覧は出せない）。タブ切り替えは同一ページ内なので
+    //   ここでは出ない→index.astro 側で unsavedLabels() を呼んで一覧付きの確認を出す。
+    window.addEventListener('beforeunload', (e) => {
+      if (unsavedLabels().length === 0) return;
+      e.preventDefault();
+    });
+
+    // ※「入力のたびに status へ未保存表示」をしていた input/change リスナーは廃止。
+    //   未保存の通知はタブ切り替え・ページ離脱の瞬間だけ（unsavedLabels 経由）にする方針。
+
+    // 定員／予約済みの数値が変わったら、その枠の「残り○組 ◎△×」表示だけを更新する。
+    // ※ working には触れず・harvest もせず・未保存通知も出さない＝軽い処理。表示の即時反映だけが目的。
+    container.addEventListener('input', (ev) => {
+      const el = ev.target;
+      if (!(el instanceof HTMLInputElement)) return;
+      const sf = el.dataset.sfield;
+      if (sf !== 'capacity' && sf !== 'booked') return; // 定員/予約済みの入力以外は無視
+      const fi = Number(el.dataset.fi);
+      const di = Number(el.dataset.di);
+      const si = Number(el.dataset.si);
+      if (Number.isNaN(fi) || Number.isNaN(di) || Number.isNaN(si)) return;
+      updateSlotStatusView(fi, di, si);
+    });
+
+    // ---- イベント（構造変更・ナビゲーションはイベント委譲）----
+    container.addEventListener('click', (ev) => {
+      const el = ev.target;
+      if (!(el instanceof Element)) return;
+      const btn = el.closest<HTMLButtonElement>('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action ?? '';
+      const fi = btn.dataset.fi !== undefined ? Number(btn.dataset.fi) : -1;
+
+      // 画像ピッカーを開く（harvest 不要）
+      if (action === 'pick-thumb') {
+        openPicker(fi);
+        return;
+      }
+
+      // ---- ナビゲーション系 ----
+      if (action === 'edit-fair') {
+        if (fi >= 0) {
+          view = 'edit';
+          editingIndex = fi;
+          render();
+        }
+        return;
+      }
+      if (action === 'back-to-list') {
+        harvest(); // 編集中の内容を working に退避してから戻る（変更は保持される）
+        view = 'list';
+        editingIndex = -1;
+        render();
+        noticeUnsaved(); // 一覧に戻る瞬間だけ、未保存があれば status に表示
+        return;
+      }
+      if (action === 'toggle-reorder') {
+        reorderMode = !reorderMode;
+        render();
+        if (reorderMode) setStatus('並べ替えモードです。≡ をドラッグしてください。', '');
+        else noticeUnsaved(); // 並べ替えモードを抜けた瞬間、未保存があれば status に表示
+        return;
+      }
+
+      // ---- ここから編集ビュー内のカード操作（schedule / 削除）----
+      const di = btn.dataset.di !== undefined ? Number(btn.dataset.di) : -1;
+      const si = btn.dataset.si !== undefined ? Number(btn.dataset.si) : -1;
+
+      harvest();
+
+      const fair = fi >= 0 ? working[fi] : undefined;
+
+      if (action === 'del-fair') {
+        if (fi >= 0 && window.confirm('このフェアを削除します。よろしいですか？')) {
+          working.splice(fi, 1);
+          view = 'list'; // 削除したら一覧へ戻る
+          editingIndex = -1;
+        }
+      } else if (action === 'add-day' && fair) {
+        fair.schedule.push({ date: '', times: [] });
+      } else if (action === 'del-day' && fair && di >= 0) {
+        fair.schedule.splice(di, 1);
+      } else if (action === 'add-slot' && fair && di >= 0) {
+        const day = fair.schedule[di];
+        // 新規枠は「定員＝既定値・予約済み0」で作る。status は残数から決まる（3-0→available）。
+        if (day) day.times.push({ time: '', status: 'available', capacity: DEFAULT_CAPACITY, booked: 0 });
+      } else if (action === 'del-slot' && fair && di >= 0 && si >= 0) {
+        const day = fair.schedule[di];
+        if (day) day.times.splice(si, 1);
+      }
+
+      render();
+    });
+
+    addBtn.addEventListener('click', () => {
+      harvest(); // 編集中があれば退避（一覧なら何もしない）
+      working.push(blankFair());
+      view = 'edit';
+      editingIndex = working.length - 1; // 追加した新規フェアをそのまま編集ビューで開く
+      render();
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      harvest(); // 編集中の1件を最新化（一覧/並べ替え時は何もしない）
+
+      const errs = validate();
+      if (errs.length > 0) {
+        const ok = window.confirm('入力に確認ポイントがあります。それでも保存しますか？\n\n' + errs.join('\n'));
+        if (!ok) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      // 公開状態（表示↔非表示）が変わるフェアを洗い出して、まとめて確認する。
+      // savedPub＝最後に読み込み／保存した時点の公開状態。差があるものだけ並べる。
+      const pubChanges = working
+        .filter((f) => savedPub.has(f.id) && savedPub.get(f.id) !== f.isPublished)
+        .map((f) => `${f.title || f.id}: ${f.isPublished ? '非表示 → 表示' : '表示 → 非表示'}`);
+      if (pubChanges.length > 0) {
+        const okPub = window.confirm(
+          '公開状態が変わるフェアがあります。保存してよいですか？\n\n' + pubChanges.join('\n')
+        );
+        if (!okPub) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      const currentIds = new Set(working.map((f) => f.id));
+      const toDelete = [...savedIds].filter((id) => !currentIds.has(id));
+
+      if (toDelete.length > 0) {
+        const okDel = window.confirm(
+          `次の ${toDelete.length} 件を Firestore から削除します（元に戻せません）:\n` + toDelete.join('\n')
+        );
+        if (!okDel) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      exportBtn.disabled = true;
+      const original = exportBtn.textContent ?? '';
+      exportBtn.textContent = '保存中…';
+      setStatus('Firestore に保存しています…', '');
+
+      try {
+        for (const id of toDelete) {
+          await deleteFairFromDb(id);
+        }
+        for (const fair of working) {
+          await saveFairToDb(fair);
+        }
+        savedIds = new Set(currentIds);
+        savedPub = new Map(working.map((f): [string, boolean] => [f.id, f.isPublished])); // 公開状態スナップショットも更新
+        snapshotSaved(); // 中身・並び順のスナップショットも更新（＝未保存ゼロになる）
+        setStatus(`保存しました（更新 ${working.length} 件 / 削除 ${toDelete.length} 件）。`, 'ok');
+      } catch (e) {
+        console.error('保存失敗:', e);
+        setStatus('保存に失敗しました（ログイン状態・通信・ルールを確認してください）。', 'warn');
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = original;
+      }
+    });
+
+    // Firestore から来たデータの欠損を補う
+    const normalizeFair = (f: Fair): Fair => {
+      // 旧データに残る tags / contents フィールドを分離して捨てる（rest には含まれない）
+      const { tags, contents, ...rest } = f as Fair & { tags?: string[]; contents?: unknown };
+      void tags; // 使わない変数の未使用警告を避ける
+      void contents;
+      return {
+        ...rest,
+        title: rest.title ?? '',
+        description: rest.description ?? '',
+        thumbnail: { src: rest.thumbnail?.src || NO_IMAGE, alt: rest.thumbnail?.alt ?? '' },
+        // 各時間枠に capacity / booked を補完し、status を残数から計算し直す。
+        // （既存データには capacity/booked が無いことがある＝補完しないと残数計算が NaN になる）
+        schedule: (rest.schedule ?? []).map((day) => ({
+          ...day,
+          times: (day.times ?? []).map((slot) => {
+            const capacity = typeof slot.capacity === 'number' ? slot.capacity : DEFAULT_CAPACITY;
+            const booked = typeof slot.booked === 'number' ? slot.booked : 0;
+            return {
+              ...slot,
+              capacity,
+              booked,
+              status: statusFromRemaining(capacity - booked), // 保存値の status は派生値なので必ず計算で上書き
+            };
+          }),
+        })),
+      };
+    };
+    const load = async (): Promise<void> => {
+      setStatus('読み込み中…', '');
+      try {
+        // フェア本体と、タグの選択肢（fair-tags マスター）を同時に取得
+        const [fairs, taxonomies] = await Promise.all([getFairsFromDb(), getTaxonomiesFromDb()]);
+        // 選択肢：fair-tags の公開中だけ・表示順に並べる
+        tagChoices = taxonomies
+          .filter((t) => t.group === 'fair-tags' && t.isPublished)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        // 選択肢：fair-contents の公開中だけ・表示順に並べる
+        contentChoices = taxonomies
+          .filter((t) => t.group === 'fair-contents' && t.isPublished)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        working = fairs.map(normalizeFair);
+        savedIds = new Set(working.map((f) => f.id));
+        savedPub = new Map(working.map((f): [string, boolean] => [f.id, f.isPublished])); // 公開状態のスナップショット
+        snapshotSaved(); // 中身・並び順のスナップショット（＝読み込み直後は未保存なし）
+        // 読み込み直後は必ず一覧から（編集状態をリセット）
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        render();
+        setStatus('', ''); // 読み込み直後は未保存なし＝status は空にする
+      } catch (e) {
+        console.error('読み込み失敗:', e);
+        setStatus('読み込みに失敗しました（ログイン状態・通信を確認してください）。', 'warn');
+      }
+    };
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        load();
+      } else {
+        working = [];
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        savedPub = new Map();
+        savedSnap = new Map();
+        savedOrderSig = '';
+        render();
+      }
+    });
+  };
+
+  init();
+</script>

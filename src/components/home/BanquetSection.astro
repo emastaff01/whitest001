@@ -1,0 +1,133 @@
+---
+// =============================================================
+// BanquetSection.astro  （TOPページ / BANQUETセクション）
+// -------------------------------------------------------------
+// ・邸宅の3本柱のひとつ「披露宴会場」を紹介。
+// ・CHAPELとは逆に、テキスト左 / 写真右 の2カラム（モバイルは縦積み）。
+//   セクションごとに左右を入れ替えることで、ページ全体に静かなリズムを作る。
+// ・背景は --off-white で、前後の白セクションとの色差をごく軽くつける。
+// ・文言は仮。上司・クライアント確認後に差し替えてください。
+// =============================================================
+
+import { url } from '../../lib/url';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const heroDir = `${base}/images/hero/`;
+
+// ---- 本文（仮・編集可）----
+const overline = 'BANQUET';
+const headline = ['ガーデンと水盤を望む<br>開放の披露宴会場'];
+const bodyParagraphs = [
+  '三方をガラスで囲まれたバンケットは、自然光と中庭の緑が差し込むなかで進む披露宴を演出します。',
+  '天井高のある空間、大理石調の床、こだわりの椅子。卓上花や装飾の組み合わせで、おふたりらしい一日に。',
+];
+---
+
+<section class="banquet" aria-labelledby="banquet-heading">
+  <div class="banquet__inner">
+    {/* マークアップ上はテキストを先に置く（PC・モバイルともテキスト→画像の自然な読み順） */}
+    <div class="banquet__text">
+      <p class="banquet__overline">{overline}</p>
+      <h2 id="banquet-heading" class="banquet__headline">{headline.map((p) => <p set:html={p} />)}</h2>
+      <div class="banquet__body">
+        {bodyParagraphs.map((p) => <p set:html={p} />)}
+      </div>
+      <p class="banquet__more">
+        <a href={url('/banquet/')}>披露宴会場を見る</a>
+      </p>
+    </div>
+    <div class="banquet__media">
+      <picture>
+        <source
+          type="image/webp"
+          srcset={`${heroDir}hero-3-banquet-1280.webp 1280w, ${heroDir}hero-3-banquet.webp 2000w`}
+          sizes="(min-width: 768px) 50vw, 100vw"
+        />
+        <img
+          src={`${heroDir}hero-3-banquet.jpg`}
+          alt="ガーデンを望む開放感のある披露宴会場"
+          width="2000"
+          height="1333"
+          loading="lazy"
+          decoding="async"
+        />
+      </picture>
+    </div>
+  </div>
+</section>
+
+<style>
+  .banquet {
+    background-color: var(--off-white);
+    padding-block: var(--space-section-y);
+  }
+  .banquet__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+  }
+  .banquet__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .banquet__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .banquet__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 32px;
+  }
+  .banquet__body {
+    font-family: var(--font-jp-sans);
+    font-weight: var(--weight-regular);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+  .banquet__body p + p {
+    margin-top: 1.4em;
+  }
+  .banquet__more {
+    margin-top: 40px;
+  }
+  .banquet__more a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .banquet__more a::after {
+    content: '  →';
+    color: var(--green);
+  }
+  .banquet__more a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .banquet__more a:hover::after {
+    color: var(--charcoal);
+  }
+
+  @media (max-width: 768px) {
+    .banquet__inner {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+  }
+</style>

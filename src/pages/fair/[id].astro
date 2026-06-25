@@ -1,0 +1,687 @@
+---
+// =============================================================
+// src/pages/fair/[id].astro （ブライダルフェア詳細ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/fair/[id]/
+// ・Astroの動的ルート。getStaticPaths() で全フェアのIDから静的生成。
+// ・各フェアの完全な情報（全日程・特典・本文）と予約CTAを配置。
+// ・Schema.org Event の JSON-LD で構造化データを出力（SEO/MEO対応）。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CtaButton from '../../components/common/CtaButton.astro';
+import { getFairs } from '../../lib/getFairs';
+import { getSiteSettings } from '../../lib/getSiteSettings';
+import { url } from '../../lib/url';
+import type { Fair } from '../../types';
+// タグの id→ラベル変換に使う早見表（公開側は taxonomies.json を読む）
+import { getTaxonomyMap } from '../../lib/getTaxonomies';
+// 体験内容アイコン（単線のシンプルなSVG。currentColorで色はCSS側から指定）
+import { listIcons, iconUrlFor } from '../../lib/fairContentIcons';
+
+// ---- 動的ルートのパス生成 ----
+// この関数で「どのURLを静的生成するか」を Astro に伝える。
+// 公開中の全フェアIDを返すことで、/fair/premium-tour-202606/ などが自動生成される。
+export async function getStaticPaths() {
+  const fairs = getFairs();
+  return fairs.map((fair) => ({
+    params: { id: fair.id },
+    props: { fair },
+  }));
+}
+
+interface Props {
+  fair: Fair;
+}
+const { fair } = Astro.props;
+const settings = getSiteSettings();
+
+// フェアタグ：id → ラベルに変換（マスターに無い／非公開の id は除外）
+const fairTagMap = getTaxonomyMap('fair-tags');
+const tagLabels = (fair.tagIds ?? [])
+.map((id) => fairTagMap.get(id)?.label) // Taxonomy オブジェクトから label を取り出す（無ければ undefined）
+.filter((label): label is string => Boolean(label)); // undefined を除いて string[] に確定
+// フェア体験内容：id → { label, icon } に変換（マスターに無い／非公開の id は除外）
+const iconList = listIcons();
+const fairContentMap = getTaxonomyMap('fair-contents');
+const contentItems = (fair.contentIds ?? [])
+  .map((id) => fairContentMap.get(id))
+  .filter((t): t is NonNullable<typeof t> => Boolean(t))
+  // icon（キー）→ 表示URL に解決。未設定・未知キーは default.svg。
+  .map((t) => ({ label: t.label, iconUrl: iconUrlFor(t.icon ?? '', iconList) }));
+// 画像パス（base 付き）
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const heroJpg = `${base}${fair.thumbnail.src}`;
+const heroWebp = heroJpg.replace(/\.jpg$/, '.webp');
+
+// 日付フォーマット（YYYY-MM-DD → YYYY.MM.DD + 曜日）
+const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return { display: `${y}.${m}.${day}`, weekday: WEEKDAYS_JA[d.getDay()] };
+}
+
+// 空き状況ラベル（JS無効時のフォールバック表示用）
+const STATUS_LABEL: Record<string, string> = {
+  available: '◎ 空きあり',
+  few: '△ 残りわずか',
+  full: '× 満席',
+};
+
+// 日付順に並べたスケジュール（フォールバック表示用）
+const sortedSchedule = [...fair.schedule].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+
+
+
+
+// 予約URL: フォーム実装時にfair_idで照合できるようクエリで渡す
+const reservationUrl =
+`${url("/contact-fair/")}?fair_id=${encodeURIComponent(fair.reservationFormId ?? fair.id)}`;
+
+// 公開URL（JSON-LD用の絶対URL）
+const SITE_URL =
+import.meta.env.PUBLIC_SITE_URL ??
+'https://ema-run-665477084949.asia-northeast1.run.app';
+const absoluteImageUrl = new URL(heroJpg, SITE_URL).href;
+
+// Schema.org Event: 日付×時間枠ごとに1件のイベントとして出力
+const events = fair.schedule.flatMap((day) =>
+  day.times.map((slot) => ({
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: fair.title,
+    description: fair.description,
+    startDate: `${day.date}T${slot.time}:00+09:00`,
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    eventStatus: 'https://schema.org/EventScheduled',
+    image: absoluteImageUrl,
+    location: {
+      '@type': 'Place',
+      name: settings.nap.name,
+      address: {
+        '@type': 'PostalAddress',
+        postalCode: settings.nap.postalCode,
+        streetAddress: settings.nap.address,
+        addressCountry: 'JP',
+      },
+    },
+    organizer: {
+      '@type': 'Organization',
+      name: settings.siteName,
+    },
+  }))
+);
+---
+
+<BaseLayout
+  title={`${fair.title}｜ホワイトハウス伊万里`}
+  description={fair.description}
+  ogImage={fair.thumbnail.src}
+>
+  {/* 構造化データ（Event）。各日程を配列で出力 */}
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(events)} />
+
+  <article class="fair-detail">
+    {/* ヒーロー画像 */}
+    <div class="fair-detail__hero">
+      <picture>
+        <source type="image/webp" srcset={heroWebp} />
+        <img
+          src={heroJpg}
+          alt={fair.thumbnail.alt}
+          width="1200"
+          height="800"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </picture>
+    </div>
+
+    <div class="fair-detail__inner">
+      {/* タイトル＆catchCopy＋カテゴリータグ＋所要時間 */}
+      <header class="fair-detail__header">
+        <p class="fair-detail__overline">BRIDAL FAIR</p>
+        <h1 class="fair-detail__title">{fair.title}</h1>
+        {fair.catchCopy && <p class="fair-detail__catch">{fair.catchCopy}</p>}
+        {
+          tagLabels.length > 0 && (
+            <ul class="fair-detail__tags" role="list">
+              {tagLabels.map((label) => (
+                <li class="fair-detail__tag">{label}</li>
+              ))}
+            </ul>
+          )
+        }
+        {fair.duration && <p class="fair-detail__duration">所要時間の目安：{fair.duration}</p>}
+      </header>
+
+      {/* 説明文 */}
+      <section class="fair-detail__body">
+        <p>{fair.description}</p>
+      </section>
+
+      {/* フェアで体験できること（アイコン＋ラベル） */}
+      {contentItems.length > 0 && (
+        <ul class="fair-contents" role="list">
+          {contentItems.map((item) => (
+            <li class="fair-contents__item">
+              <span
+                class="fair-contents__icon"
+                style={`--icon: url('${item.iconUrl}')`}
+                role="img"
+                aria-label={item.label}
+              ></span>
+              <span class="fair-contents__label">{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 来館特典：フェアに参加するともらえる特典 */}
+      {
+        fair.benefits && fair.benefits.length > 0 && (
+          <section class="fair-detail__block">
+            <p class="fair-detail__block-label">来館特典</p>
+            <ul class="fair-detail__benefits">
+              {fair.benefits.map((b) => <li>{b}</li>)}
+            </ul>
+          </section>
+        )
+      }
+
+      {/* 成約特典：このフェアで成約した場合の特典。データがある時だけ表示 */}
+      {
+        fair.contractBenefits && fair.contractBenefits.length > 0 && (
+          <section class="fair-detail__block">
+            <p class="fair-detail__block-label">成約特典</p>
+            <ul class="fair-detail__benefits">
+              {fair.contractBenefits.map((b) => <li>{b}</li>)}
+            </ul>
+          </section>
+        )
+      }
+
+      {/* 開催日程・空き状況の選択 ＋ 予約CTA
+          ・サーバー側では全日程×時間を静的リストで出力（JS無効・SEO対応）。
+          ・JSが「今日以降かつ空きのある日」だけを日付プルダウンに出し、
+            選んだ日の時間枠を◎△×で表示。×（満席）は押せない。
+          ・選んだ日付＋時間は予約URLの ?date=&time= に反映。 */}
+      <section class="fair-sched">
+        <p class="fair-detail__block-label">開催日程・空き状況</p>
+
+        {/* JSが読み取るスケジュールデータ（実行はされない・データ置き場） */}
+        <script type="application/json" is:inline data-fair-schedule set:html={JSON.stringify(fair.schedule)}
+        ></script>
+
+        {/* JS無効時のフォールバック：全日程×時間を静的表示 */}
+        <div class="fair-sched__fallback">
+          {
+            sortedSchedule.map((day) => {
+              const f = formatDate(day.date);
+              return (
+                <div class="fair-sched__fb-day">
+                  <span class="fair-sched__fb-date">
+                    {f.display}（{f.weekday}）
+                  </span>
+                  <span class="fair-sched__fb-times">
+                    {day.times.map((t) => `${t.time} ${STATUS_LABEL[t.status]}`).join('　／　')}
+                  </span>
+                </div>
+              );
+            })
+          }
+        </div>
+
+        {/* JS有効時のインタラクティブUI（初期は hidden、JSで表示） */}
+        <div class="fair-sched__ui" hidden>
+          <div class="fair-sched__row">
+            <label class="fair-sched__label" for={`sched-date-${fair.id}`}>日付を選ぶ</label>
+            <select id={`sched-date-${fair.id}`} class="fair-dates__select fair-sched__date"></select>
+          </div>
+
+          <div class="fair-sched__row">
+            <p class="fair-sched__label">時間を選ぶ</p>
+            <div class="fair-sched__times" role="group" aria-label="開催時間"></div>
+          </div>
+
+          <p class="fair-sched__selected" aria-live="polite"></p>
+
+          <div class="fair-dates__cta">
+            <CtaButton href={reservationUrl} variant="solid" ga="fairCV">
+              この日程で予約に進む
+            </CtaButton>
+            <p class="fair-dates__note">
+              ご予約後、担当者より確認のご連絡をいたします。日程が未定でもお申し込みいただけます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <script is:inline>
+        // 開催日程・空き状況の選択（日付プルダウン → その日の空き時間 → 予約URLに反映）
+        // ・is:inline … 素のブラウザ用JS。Astroにバンドル・型チェックさせずそのまま埋め込む指定。
+        // ・プログレッシブエンハンスメント：JS無効でも全日程がフォールバック表示で読める。
+        document.querySelectorAll('.fair-sched').forEach((root) => {
+          const dataEl = root.querySelector('[data-fair-schedule]');
+          if (!dataEl) return;
+          let schedule;
+          try {
+            schedule = JSON.parse(dataEl.textContent);
+          } catch (e) {
+            return; // 壊れたデータならフォールバックのまま
+          }
+
+          const fallback = root.querySelector('.fair-sched__fallback');
+          const ui = root.querySelector('.fair-sched__ui');
+          const dateSelect = root.querySelector('.fair-sched__date');
+          const timesWrap = root.querySelector('.fair-sched__times');
+          const selectedLabel = root.querySelector('.fair-sched__selected');
+          const ctaLink = root.querySelector('.fair-dates__cta a');
+          const baseHref = ctaLink ? ctaLink.getAttribute('href') : '';
+
+          const WD = ['日', '月', '火', '水', '木', '金', '土'];
+          function fmt(iso) {
+            const d = new Date(iso);
+            return iso.replaceAll('-', '.') + '（' + WD[d.getDay()] + '）';
+          }
+          const STAT = { available: '◎ 空きあり', few: '△ 残りわずか', full: '× 満席' };
+
+          // 今日（0時にそろえて比較）
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          // 「今日以降」かつ「空き枠が1つ以上ある日」だけを日付順に
+          const validDays = schedule
+            .filter(
+              (day) =>
+                new Date(day.date) >= today && day.times.some((t) => t.status !== 'full')
+            )
+            .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+          // 選べる日が無ければフォールバック表示のまま終了
+          if (validDays.length === 0) return;
+
+          // フォールバックを隠してインタラクティブUIを表示
+          if (fallback) fallback.hidden = true;
+          if (ui) ui.hidden = false;
+
+          // 日付プルダウンを組み立て
+          validDays.forEach((day) => {
+            const opt = document.createElement('option');
+            opt.value = day.date;
+            opt.textContent = fmt(day.date);
+            dateSelect.appendChild(opt);
+          });
+
+          let chosenDate = null;
+          let chosenTime = null;
+
+          // 予約URLと「ご希望」ラベルを更新
+          function updateState() {
+            if (selectedLabel) {
+              selectedLabel.textContent =
+                chosenDate && chosenTime ? 'ご希望：' + fmt(chosenDate) + '　' + chosenTime : '';
+            }
+            if (ctaLink && baseHref && chosenDate && chosenTime) {
+              const j = baseHref.includes('?') ? '&' : '?';
+              ctaLink.setAttribute(
+                'href',
+                baseHref + j + 'date=' + encodeURIComponent(chosenDate) + '&time=' + encodeURIComponent(chosenTime)
+              );
+            }
+          }
+
+          // 時間を選ぶ
+          function chooseTime(time) {
+            chosenTime = time;
+            timesWrap.querySelectorAll('.fair-sched__time').forEach((b) => {
+              b.classList.toggle('is-active', b.dataset.time === time);
+            });
+            updateState();
+          }
+
+          // 選んだ日付の時間枠を描画（◎△×。×は押せない）
+          function renderTimes(date) {
+            const day = validDays.find((d) => d.date === date);
+            timesWrap.innerHTML = '';
+            chosenDate = date;
+            chosenTime = null;
+            let firstOpen = null;
+            day.times.forEach((t) => {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'fair-sched__time';
+              b.dataset.time = t.time;
+              b.dataset.status = t.status;
+              b.innerHTML =
+                '<span class="fair-sched__time-num">' + t.time + '</span>' +
+                '<span class="fair-sched__time-stat">' + STAT[t.status] + '</span>';
+              if (t.status === 'full') {
+                b.disabled = true;
+              } else {
+                b.addEventListener('click', () => chooseTime(t.time));
+                if (!firstOpen) firstOpen = t.time;
+              }
+              timesWrap.appendChild(b);
+            });
+            // その日の最初の空き時間を初期選択
+            if (firstOpen) chooseTime(firstOpen);
+            else updateState();
+          }
+
+          dateSelect.addEventListener('change', () => renderTimes(dateSelect.value));
+
+          // 初期表示：最初の有効な日付＋その日の最初の空き時間
+          dateSelect.value = validDays[0].date;
+          renderTimes(validDays[0].date);
+        });
+      </script>
+
+      {/* 一覧に戻る */}
+      <p class="fair-detail__back">
+        <a href={url('/fair/')}>←  フェア一覧に戻る</a>
+      </p>
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .fair-detail {
+    background-color: var(--white);
+  }
+  .fair-detail__hero {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-top: clamp(40px, 5vw, 64px);
+  }
+  .fair-detail__hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .fair-detail__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-block: clamp(48px, 6vw, 80px);
+  }
+  .fair-detail__header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+  .fair-detail__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .fair-detail__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 20px;
+  }
+  .fair-detail__catch {
+    font-family: var(--font-jp-serif);
+    font-size: clamp(1rem, 1.8vw, 1.15rem);
+    line-height: 1.7;
+    color: var(--dark-gray);
+  }
+  .fair-detail__tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 24px;
+  }
+  .fair-detail__tag {
+    font-family: var(--font-jp-sans);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--green);
+    border: 0.5px solid var(--hairline-green);
+    padding: 3px 12px;
+  }
+  .fair-detail__duration {
+    margin-top: 18px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--dark-gray);
+  }
+  .fair-detail__body {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+    margin-bottom: 56px;
+  }
+
+  /* フェアで体験できること（アイコン＋ラベル） */
+  .fair-contents {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+  .fair-contents__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
+.fair-contents__icon {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    background-color: var(--charcoal);
+    -webkit-mask: var(--icon) no-repeat center / contain;
+    mask: var(--icon) no-repeat center / contain;
+  }
+  .fair-contents__label {
+    font-family: var(--font-jp-sans);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--dark-gray);
+  }
+  @media (max-width: 600px) {
+    .fair-contents {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+    }
+  }
+
+  .fair-detail__block {
+    margin-bottom: 48px;
+    border-top: 0.5px solid var(--hairline-dark);
+    padding-top: 32px;
+  }
+  .fair-detail__block-label {
+    font-family: var(--font-jp-sans);
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    color: var(--green);
+    margin-bottom: 20px;
+  }
+
+  /* 開催日程・空き状況の選択UI */
+  .fair-sched {
+    margin-top: 56px;
+    border-top: 0.5px solid var(--hairline-dark);
+    padding-top: 32px;
+  }
+
+  /* JS無効時のフォールバック（全日程の静的表示） */
+  .fair-sched__fallback {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+  }
+  .fair-sched__fb-day {
+    padding-block: 10px;
+    border-bottom: 0.5px solid var(--hairline-dark);
+  }
+  .fair-sched__fb-date {
+    font-family: var(--font-en-display);
+    font-size: 1.1rem;
+    color: var(--charcoal);
+    margin-right: 14px;
+  }
+
+  /* 日付プルダウン・時間選択の共通行 */
+  .fair-sched__row {
+    margin-bottom: 28px;
+  }
+  .fair-sched__label {
+    display: block;
+    font-family: var(--font-jp-sans);
+    font-size: 0.8rem;
+    color: var(--gray);
+    margin-bottom: 10px;
+  }
+  .fair-dates__select {
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--charcoal);
+    padding: 10px 14px;
+    border: 0.5px solid var(--gray);
+    background-color: var(--white);
+    width: 100%;
+    max-width: 320px;
+  }
+
+  /* 時間枠ボタン（◎△×） */
+  .fair-sched__times {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  :global(.fair-sched__times button.fair-sched__time){
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 100px;
+    padding: 12px 16px;
+    background-color: var(--white);
+    border: 1px solid var(--gray);
+    cursor: pointer;
+    font-family: var(--font-jp-sans);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+  :global(.fair-sched__time:hover:not(:disabled)) {
+    background-color: var(--off-white);
+  }
+  :global(.fair-sched__time.is-active) {
+    border: 1px solid var(--green);
+    background-color: var(--off-white);
+  }
+  :global(.fair-sched__time:disabled) {
+    cursor: not-allowed;
+    background-color: var(--off-white);
+    border-color: var(--hairline-dark);
+    opacity: 0.55;
+  }
+  :global(.fair-sched__time-num) {
+    font-family: var(--font-en-display);
+    font-size: 1.2rem;
+    color: var(--charcoal);
+  }
+  :global(.fair-sched__time:disabled .fair-sched__time-num) {
+    color: var(--gray);
+  }
+  :global(.fair-sched__time-stat) {
+    font-size: 0.72rem;
+  }
+ :global( .fair-sched__time[data-status='available'] .fair-sched__time-stat) {
+    color: var(--green);
+  }
+  :global(.fair-sched__time[data-status='few'] .fair-sched__time-stat) {
+    color: var(--dark-gray);
+  }
+  :global(.fair-sched__time[data-status='full'] .fair-sched__time-stat) {
+    color: var(--gray);
+  }
+  :global(.fair-sched__times+button.fair-sched__time){
+  background:var(--accent);
+  color:var(--white);
+  padding:5px 10px;
+  margin-right:1rem;
+  display:block;
+  }
+  
+  
+
+  :global(.fair-sched__selected) {
+    margin-top: 8px;
+    min-height: 1.5em;
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    color: var(--green);
+  }
+
+  .fair-dates__cta {
+    margin-top: 40px;
+    text-align: center;
+  }
+  .fair-dates__note {
+    margin-top: 14px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.8rem;
+    color: var(--gray);
+  }
+
+  /* 特典 */
+  .fair-detail__benefits {
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--dark-gray);
+  }
+  .fair-detail__benefits li {
+    padding-left: 1.2em;
+    position: relative;
+  }
+  .fair-detail__benefits li::before {
+    content: '・';
+    color: var(--green);
+    position: absolute;
+    left: 0;
+  }
+
+  .fair-detail__back {
+    margin-top: 64px;
+    text-align: center;
+  }
+  .fair-detail__back a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .fair-detail__back a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+
+  @media (max-width: 600px) {
+    .fair-sched__times {
+      gap: 8px;
+    }
+    .fair-sched__time {
+      min-width: 84px;
+      padding: 10px 12px;
+    }
+  }
+</style>

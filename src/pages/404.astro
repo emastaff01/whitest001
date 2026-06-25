@@ -1,0 +1,33 @@
+---
+// =============================================================
+// src/pages/404.astro
+// -------------------------------------------------------------
+// =============================================================
+
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/common/PageHeader.astro';
+import { url } from "../lib/url";
+---
+
+<BaseLayout
+  title="お探しのページは見つかりませんでした｜ホワイトハウス伊万里"
+  description="お探しのページは見つかりませんでした"
+>
+  <PageHeader
+    overline="NOT FOUND"
+    title="404 Not Found"
+    description="お探しのページは見つかりませんでした"
+  />
+
+  <section class="facility">
+    <div class="facility__inner" style="text-align:center;padding-bottom:60px;">
+      
+      {/* リード文 */}
+      <p class="facility__lead">
+        ご指定のページは存在しないか、webサイトリニューアル後に移動された可能性があります。<br>
+        トップページへ移動お願いいたします。
+      </p>
+      <a href={url("/")} class="back__button" style="color:green;line-height:4.5;">←トップへ戻る</a>
+      </div>
+
+</BaseLayout>

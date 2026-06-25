@@ -1,0 +1,163 @@
+---
+// =============================================================
+// src/pages/news/index.astro （お知らせ一覧・アーカイブ）
+// -------------------------------------------------------------
+// URL: /test-whi/news/
+// ・getPosts() は「公開中のみ・publishedAt降順」をすでに担保しているので、
+//   画面側はそのまま並べるだけ（並び順の責務は get*.ts に集約）。
+// ・各行は「小サムネ（あれば）＋日付＋カテゴリ＋タイトル」。行全体を詳細へリンク。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getPosts } from '../../lib/getPosts';
+import { getTaxonomyMap } from '../../lib/getTaxonomies'; // id→ラベルの早見表
+import { url } from '../../lib/url';
+import type { Post } from '../../types';
+
+const posts = getPosts();
+
+// お知らせカテゴリーの早見表（id → Taxonomy）。表示時に categoryId をラベルへ変換する。
+const categoryMap = getTaxonomyMap('news-category');
+// 1記事の categoryId からラベルを引く（未設定や未知idなら undefined＝表示しない）。
+const categoryLabelOf = (post: Post): string | undefined =>
+  post.categoryId ? categoryMap.get(post.categoryId)?.label : undefined;
+
+// base 付きパス（他ページと同じ作法）。画像のため .jpg→.webp 変換も用意。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 'YYYY-MM-DD' → 'YYYY.MM.DD'（表示用）
+const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
+---
+
+<BaseLayout
+  title="お知らせ｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里からの最新のお知らせ・フェア情報・メディア掲載などをご案内します。"
+>
+  <section class="news">
+    <PageHeader
+      overline="NEWS"
+      title="お知らせ"
+      description="ホワイトハウス伊万里からの最新情報をお届けします。"
+    />
+
+    <div class="news__inner">
+      {
+        posts.length > 0 ? (
+          <div class="news__list">
+            {posts.map((post) => (
+              <a class="news-row" href={url(`/news/${post.id}/`)}>
+                {/* キャッチ画像がある記事だけサムネを表示 */}
+                {post.thumbnail && (
+                  <div class="news-row__thumb">
+                    <picture>
+                      <source type="image/webp" srcset={toWebpPath(post.thumbnail.src)} />
+                      <img
+                        src={toAssetPath(post.thumbnail.src)}
+                        alt={post.thumbnail.alt}
+                        width="160"
+                        height="107"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </picture>
+                  </div>
+                )}
+                <div class="news-row__text">
+                  <div class="news-row__meta">
+                    <span class="news-row__date">{toDisplayDate(post.publishedAt)}</span>
+                    {categoryLabelOf(post) && (
+                      <span class="news-row__category">{categoryLabelOf(post)}</span>
+                    )}
+                  </div>
+                  <p class="news-row__title">{post.title}</p>
+                </div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p class="news__empty">現在、お知らせはありません。</p>
+        )
+      }
+    </div>
+  </section>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .news {
+    background-color: var(--white);
+  }
+  .news__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-block: clamp(48px, 6vw, 80px);
+  }
+  .news__list {
+    border-top: 0.5px solid var(--hairline-dark);
+  }
+  .news-row {
+    display: flex;
+    gap: clamp(16px, 2.5vw, 28px);
+    align-items: center;
+    padding-block: clamp(18px, 2.5vw, 26px);
+    border-bottom: 0.5px solid var(--hairline-dark);
+  }
+  .news-row__thumb {
+    flex: 0 0 auto;
+    width: clamp(88px, 14vw, 132px);
+  }
+  .news-row__thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+  }
+  .news-row__text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .news-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin-bottom: 8px;
+  }
+  .news-row__date {
+    font-family: var(--font-en-display);
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    color: var(--charcoal);
+  }
+  .news-row__category {
+    font-family: var(--font-jp-sans);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--green);
+    border: 0.5px solid var(--hairline-green);
+    padding: 2px 10px;
+  }
+  .news-row__title {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+    line-height: 1.6;
+    color: var(--dark-gray);
+    transition: color 0.2s ease;
+  }
+  .news-row:hover .news-row__title {
+    color: var(--green);
+  }
+  .news__empty {
+    font-family: var(--font-jp-sans);
+    color: var(--gray);
+    text-align: center;
+    padding-block: 48px;
+  }
+</style>

@@ -1,0 +1,210 @@
+---
+// =============================================================
+// FairCard.astro  （フェアカード単体・複数箇所で使い回す）
+// -------------------------------------------------------------
+// ・TOPページの FairSection と /fair/ 一覧ページで同じ見た目を使うため、
+//   カード部分をこのコンポーネントに切り出した。
+// ・カード全体が <a> でクリック可能（/fair/[id]/ へ）。
+// =============================================================
+
+import type { Fair } from '../../types';
+import { url } from '../../lib/url';
+// タグの id→ラベル変換に使う早見表（公開側は taxonomies.json を読む）
+import { getTaxonomyMap } from '../../lib/getTaxonomies';
+
+interface Props {
+  fair: Fair;
+  compact?: boolean; // true で簡易表示（写真・日付・タイトル・ボタンのみ）。既定 false ＝全項目表示
+}
+const { fair, compact = false } = Astro.props; // 渡されなければ compact は false
+
+// フェアタグ：id → ラベルに変換（マスターに無い／非公開の id は除外）
+const fairTagMap = getTaxonomyMap('fair-tags');
+const tagLabels = (fair.tagIds ?? [])
+.map((id) => fairTagMap.get(id)?.label) // Taxonomy オブジェクトから label を取り出す（無ければ undefined）
+.filter((label): label is string => Boolean(label));
+
+// 画像パス（base 付き安全連結）
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 日付フォーマット（YYYY-MM-DD → YYYY.MM.DD + 曜日）
+const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return { display: `${y}.${m}.${day}`, weekday: WEEKDAYS_JA[d.getDay()] };
+}
+
+// schedule から「最も早い開催日」と「他の日程数」を求める
+const sortedDays = [...fair.schedule].sort((a, b) => (a.date < b.date ? -1 : 1));
+const firstDate = sortedDays[0]?.date;
+const fmt = formatDate(firstDate);
+const otherCount = sortedDays.length - 1;
+---
+
+<article class:list={['fair-card', { 'fair-card--compact': compact }]}>
+  <a class="fair-card__link" href={url(`/fair/${fair.id}/`)}>
+    <div class="fair-card__media">
+      <picture>
+        <source type="image/webp" srcset={toWebpPath(fair.thumbnail.src)} />
+        <img
+          src={toAssetPath(fair.thumbnail.src)}
+          alt={fair.thumbnail.alt}
+          width="1200"
+          height="800"
+          loading="lazy"
+          decoding="async"
+        />
+      </picture>
+    </div>
+    <div class="fair-card__text">
+      <div class="fair-card__date">
+        <span class="fair-card__date-num">{fmt.display}</span>
+        <span class="fair-card__date-sub">（{fmt.weekday}）</span>
+        {otherCount > 0 && <span class="fair-card__date-more">他 {otherCount} 日程</span>}
+      </div>
+      {!compact && tagLabels.length > 0 && (
+        <ul class="fair-card__tags" role="list">
+          {tagLabels.map((label) => (
+            <li class="fair-card__tag">{label}</li>
+          ))}
+        </ul>
+      )}
+      <h3 class="fair-card__title">{fair.title}</h3>
+      {!compact && fair.catchCopy && <p class="fair-card__catch">{fair.catchCopy}</p>}
+      <p class="fair-card__body">{fair.description}</p>
+      {!compact && fair.benefits && fair.benefits.length > 0 && (
+        <div class="fair-card__benefits">
+          <p class="fair-card__benefits-label">来館特典</p>
+          <p class="fair-card__benefits-list">{fair.benefits.join(' ／ ')}</p>
+        </div>
+      )}
+      <span class="fair-card__more">予約・詳細を見る  →</span>
+    </div>
+  </a>
+</article>
+
+<style>
+  .fair-card__link {
+    display: block;
+    color: inherit;
+    transition: opacity 0.2s ease;
+  }
+  .fair-card__link:hover {
+    opacity: 0.82;
+  }
+  .fair-card__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .fair-card__text {
+    padding-top: 24px;
+  }
+  .fair-card__date {
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--charcoal);
+    color: var(--charcoal);
+    line-height: 1.4;
+  }
+  .fair-card__date-num {
+    font-family: var(--font-en-display);
+    font-weight: var(--weight-regular);
+    font-size: clamp(1.6rem, 2.6vw, 2rem);
+    letter-spacing: 0.02em;
+  }
+  .fair-card__date-sub {
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--dark-gray);
+    margin-left: 6px;
+  }
+  .fair-card__date-more {
+    display: inline-block;
+    margin-left: 10px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.75rem;
+    color: var(--green);
+  }
+  .fair-card__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.05rem, 1.8vw, 1.2rem);
+    line-height: 1.6;
+    color: var(--charcoal);
+    margin-bottom: 10px;
+  }
+  .fair-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .fair-card__tag {
+    font-family: var(--font-jp-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--green);
+    border: 0.5px solid var(--hairline-green);
+    padding: 2px 9px;
+  }
+  .fair-card__catch {
+    font-family: var(--font-jp-serif);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--dark-gray);
+    margin-bottom: 12px;
+  }
+  .fair-card__body {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+    margin-bottom: 18px;
+  }
+  .fair-card__benefits {
+    margin-bottom: 20px;
+  }
+  .fair-card__benefits-label {
+    display: inline-block;
+    font-family: var(--font-jp-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--charcoal);
+    border: 1px solid var(--charcoal);
+    padding: 3px 10px;
+    margin-bottom: 10px;
+  }
+  .fair-card__benefits-list {
+    font-family: var(--font-jp-sans);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--dark-gray);
+  }
+  .fair-card__more {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .fair-card__link:hover .fair-card__more {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .fair-card--compact .fair-card__date-num {
+    font-size: clamp(1.3rem, 2vw, 1.6rem);
+  }
+  .fair-card--compact .fair-card__title {
+    font-size: clamp(0.95rem, 1.5vw, 1.05rem);
+  }
+  .fair-card--compact .fair-card__text {
+    padding-top: 16px;
+  }
+</style>

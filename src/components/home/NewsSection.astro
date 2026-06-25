@@ -1,0 +1,181 @@
+---
+// =============================================================
+// NewsSection.astro  （TOPページ / NEWSセクション）
+// -------------------------------------------------------------
+// ・getPosts() でお知らせを取得し、最新4件まで表示。
+// ・各行: 日付 | カテゴリ | タイトル を整列したシンプルな構成。
+// ・お知らせが0件の場合は空のメッセージを表示。
+// ・末尾に /news/ 一覧ページへの導線。
+// =============================================================
+
+import { getPosts } from '../../lib/getPosts';
+import { getTaxonomyMap } from '../../lib/getTaxonomies'; // id→ラベルの早見表
+import { url } from '../../lib/url';
+import type { Post } from '../../types';
+
+// TOPでは最新4件まで表示
+const posts = getPosts().slice(0, 4);
+
+// お知らせカテゴリーの早見表（id → Taxonomy）。表示時に categoryId をラベルへ変換する。
+const categoryMap = getTaxonomyMap('news-category');
+const categoryLabelOf = (post: Post): string | undefined =>
+  post.categoryId ? categoryMap.get(post.categoryId)?.label : undefined;
+
+// 'YYYY-MM-DD' を '2026.05.15' のように表示
+const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
+
+// ---- セクション見出し ----
+const overline = 'NEWS';
+const headline = 'お知らせ';
+---
+
+<section class="news" aria-labelledby="news-heading">
+  <div class="news__inner">
+    <header class="news__header">
+      <p class="news__overline">{overline}</p>
+      <h2 id="news-heading" class="news__headline">{headline}</h2>
+    </header>
+
+    {
+      posts.length === 0 ? (
+        <p class="news__empty">現在お知らせはありません。</p>
+      ) : (
+        <ul class="news__list">
+          {posts.map((post) => (
+            <li class="news-item">
+              <a class="news-item__link" href={url(`/news/${post.id}/`)}>
+                <span class="news-item__date">{toDisplayDate(post.publishedAt)}</span>
+                {categoryLabelOf(post) && (
+                  <span class="news-item__category">{categoryLabelOf(post)}</span>
+                )}
+                <span class="news-item__title">{post.title}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    <p class="news__more">
+      <a href={url('/news/')}>お知らせ一覧へ</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .news {
+    background-color: var(--off-white);
+    padding-block: var(--space-section-y);
+  }
+  .news__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .news__header {
+    text-align: center;
+    margin-bottom: clamp(40px, 5vw, 56px);
+  }
+  .news__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .news__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+  }
+
+  .news__empty {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.92rem;
+    color: var(--gray);
+    padding: 32px 0;
+  }
+
+  .news__list {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    border-top: 0.5px solid var(--hairline-dark);
+  }
+  .news-item {
+    border-bottom: 0.5px solid var(--hairline-dark);
+  }
+  .news-item__link {
+    display: grid;
+    grid-template-columns: 110px 80px 1fr;
+    gap: 20px;
+    align-items: baseline;
+    padding: 20px 8px;
+    color: inherit;
+    transition: color 0.2s ease;
+  }
+  .news-item__link:hover {
+    color: var(--green);
+  }
+  .news-item__date {
+    font-family: var(--font-en-display);
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+    color: var(--charcoal);
+  }
+  .news-item__category {
+    font-family: var(--font-jp-sans);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--green);
+    text-align: center;
+    padding: 4px 8px;
+    border: 0.5px solid var(--hairline-green);
+    justify-self: start;
+    line-height: 1.4;
+  }
+  .news-item__title {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.88rem, 1.5vw, 0.95rem);
+    line-height: 1.65;
+    color: var(--dark-gray);
+  }
+
+  .news__more {
+    margin-top: 48px;
+    text-align: center;
+  }
+  .news__more a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .news__more a::after {
+    content: '  →';
+    color: var(--green);
+  }
+  .news__more a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .news__more a:hover::after {
+    color: var(--charcoal);
+  }
+
+  @media (max-width: 600px) {
+    .news-item__link {
+      grid-template-columns: 1fr;
+      gap: 6px;
+      padding: 18px 4px;
+    }
+    .news-item__category {
+      justify-self: start;
+    }
+  }
+</style>

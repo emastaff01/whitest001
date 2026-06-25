@@ -1,0 +1,146 @@
+---
+// =============================================================
+// ReportCard.astro （レポートカード単体・複数箇所で使い回す）
+// -------------------------------------------------------------
+// ・TOPの ReportSection と /report/ 一覧で同じ見た目を使うため、
+//   カード部分をこのコンポーネントに切り出した（PlanCard/FairCard と同じ）。
+// ・カード全体が <a> でクリック可能（/report/[id]/ へ）。
+// =============================================================
+
+import type { Report } from '../../types';
+import { url } from '../../lib/url';
+// タグの id→ラベル変換に使う早見表（公開側は taxonomies.json を読む）
+import { getTaxonomyMap } from '../../lib/getTaxonomies';
+
+// このカードが受け取るデータ（1件分のレポート）
+interface Props {
+  report: Report;
+}
+const { report } = Astro.props;
+
+// レポートのタグ：id → ラベルに変換（マスターに無い／非公開の id は除外）
+const reportTagMap = getTaxonomyMap('report-tags');
+const tagLabels = (report.tagIds ?? [])
+  .map((id) => reportTagMap.get(id)?.label) // Taxonomy から label を取り出す（無ければ undefined）
+  .filter((label): label is string => Boolean(label)); // undefined を除いて string[] に確定
+
+// 画像パス（base 付き安全連結）。他カードと同じ作り方。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 'YYYY-MM-DD' を 'YYYY.MM.DD' に変換（英字書体の日付表示用）。無ければ空文字。
+const toDisplayDate = (iso?: string) => (iso ? iso.replaceAll('-', '.') : '');
+---
+
+<article class="report-card">
+  <a class="report-card__link" href={url(`/report/${report.id}/`)}>
+	<div class="report-card__media">
+	  <picture>
+		<source type="image/webp" srcset={toWebpPath(report.thumbnail.src)} />
+		<img
+		  src={toAssetPath(report.thumbnail.src)}
+		  alt={report.thumbnail.alt}
+		  width="1200"
+		  height="800"
+		  loading="lazy"
+		  decoding="async"
+		/>
+	  </picture>
+	</div>
+	<div class="report-card__text">
+	  {/* メタ情報：それぞれ「データがある時だけ」表示（型が任意フィールドのため） */}
+	  <p class="report-card__meta">
+		{report.weddingDate && (
+		  <span class="report-card__date">{toDisplayDate(report.weddingDate)}</span>
+		)}
+		{report.coupleName && (
+		  <span class="report-card__couple">{report.coupleName}様</span>
+		)}
+		{report.guestCount && (
+		  <span class="report-card__guests">ゲスト {report.guestCount}名</span>
+		)}
+	  </p>
+	  <h3 class="report-card__title">{report.title}</h3>
+	  <p class="report-card__body">{report.body}</p>
+	  {tagLabels.length > 0 && (
+		  <p class="report-card__tags">
+			{tagLabels.map((label) => `#${label}`).join('  ')}
+		  </p>
+		)}
+	  <span class="report-card__more">詳しく見る  →</span>
+	</div>
+  </a>
+</article>
+
+<style>
+  .report-card__link {
+	display: block;
+	color: inherit;
+	transition: opacity 0.2s ease;
+  }
+  .report-card__link:hover {
+	opacity: 0.82;
+  }
+  .report-card__media img {
+	display: block;
+	width: 100%;
+	height: auto;
+  }
+  .report-card__text {
+	padding-top: 20px;
+  }
+  .report-card__meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+	margin-bottom: 14px;
+	align-items: baseline;
+  }
+  .report-card__date {
+	font-family: var(--font-en-display);
+	font-size: 1.05rem;
+	color: var(--charcoal);
+	letter-spacing: 0.02em;
+  }
+  .report-card__couple {
+	font-family: var(--font-jp-sans);
+	font-size: 0.85rem;
+	color: var(--green);
+  }
+  .report-card__guests {
+	font-family: var(--font-jp-sans);
+	font-size: 0.78rem;
+	color: var(--gray);
+  }
+  .report-card__title {
+	font-family: var(--font-jp-serif);
+	font-weight: var(--weight-light);
+	font-size: clamp(1rem, 1.7vw, 1.15rem);
+	line-height: 1.6;
+	color: var(--charcoal);
+	margin-bottom: 12px;
+  }
+  .report-card__body {
+	font-family: var(--font-jp-sans);
+	font-size: 0.85rem;
+	line-height: var(--lh-body);
+	color: var(--dark-gray);
+	margin-bottom: 14px;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+  }
+  .report-card__tags {
+	font-family: var(--font-jp-sans);
+	font-size: 0.75rem;
+	color: var(--gray);
+	margin-bottom: 14px;
+  }
+  .report-card__more {
+	font-family: var(--font-jp-sans);
+	font-size: 0.82rem;
+	color: var(--green);
+  }
+</style>

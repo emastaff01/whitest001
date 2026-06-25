@@ -1,0 +1,50 @@
+[
+  {
+    "id": "faq-fair",
+    "question": "見学やフェアには予約が必要ですか？",
+    "answer": "事前のご予約をお願いしております。ご見学・ご相談は無料で承りますので、お気軽にフェア予約ページよりお申し込みください。当日のご来館もご相談に応じます。",
+    "category": "フェア",
+    "isPublished": true,
+    "sortOrder": 1
+  },
+  {
+    "id": "faq-guest-count",
+    "question": "何名から挙式できますか？",
+    "answer": "10名様から最大100名様までご対応いたします。ご家族だけの少人数婚から、おふたりらしいスタイルでお選びいただけます。",
+    "category": "プラン",
+    "isPublished": true,
+    "sortOrder": 2
+  },
+  {
+    "id": "faq-parking",
+    "question": "駐車場はありますか？",
+    "answer": "敷地内に約20台分の無料駐車場をご用意しています。当日多くなる場合は近隣駐車場のご案内も可能です。",
+    "category": "アクセス",
+    "isPublished": true,
+    "sortOrder": 3
+  },
+  {
+    "id": "faq-byob-dress",
+    "question": "衣裳やヘアメイクの持ち込みはできますか？",
+    "answer": "原則として持ち込みOKです。詳しい条件や費用についてはお打ち合わせの際にご案内いたします。",
+    "category": "当日",
+    "isPublished": true,
+    "sortOrder": 4
+  },
+  {
+    "id": "faq-allergy",
+    "question": "アレルギーや苦手な食材への対応はできますか？",
+    "answer": "事前にお申し付けいただければ、料理長と相談の上で個別にご対応いたします。お打ち合わせの際にご共有ください。",
+    "category": "料理",
+    "isPublished": true,
+    "sortOrder": 5
+  },
+  {
+    "id": "faq-ceremony-only",
+    "question": "挙式のみのご利用は可能ですか？",
+    "answer": "挙式のみ、挙式＋会食、披露宴フルコース等、幅広くお選びいただけます。詳細はプラン一覧をご覧ください。",
+    "category": "プラン",
+    "isPublished": true,
+    "sortOrder": 6
+  }
+]

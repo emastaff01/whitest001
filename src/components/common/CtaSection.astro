@@ -1,0 +1,129 @@
+---
+// =============================================================
+// CtaSection.astro （最終CTA：3つのお問い合わせ窓口への分岐）
+// -------------------------------------------------------------
+// 各ページの末尾（フッターの直前）に置く想定の共通CTAです。
+// 設計資料の「16. 最終CTA（3種類のフォームへの分岐）」に対応します。
+//
+// ・フェア予約 / プラン相談 / 来館・お問い合わせ の3導線
+// ・補助導線として LINE相談・電話（lineCV / phoneCV を計測）
+// ・見出しの明朝（Noto Serif JP）は「CTA直前」で許可された使用箇所
+// =============================================================
+
+import { url } from '../../lib/url';
+import { getSiteSettings } from '../../lib/getSiteSettings';
+import CtaButton from './CtaButton.astro';
+
+const settings = getSiteSettings();
+const phone = settings.nap.phone;
+const telHref = `tel:${phone.replace(/[^0-9]/g, '')}`;
+const lineHref = settings.lineUrl || '#';
+
+
+---
+
+<section class="cta-section">
+  <div class="cta-section__inner">
+    <p class="cta-section__en">CONTACT</p>
+    <h2 class="cta-section__title">ご相談・ご予約</h2>
+    <p class="cta-section__lead">
+      メール・LINE・お電話で承っております。<br />
+      どの窓口からでもお気軽にお問い合わせください。
+    </p>
+
+<!-- メインのお問い合わせボタン（メールフォームへ） -->
+    <!-- お問い合わせ導線：メール / LINE / 電話 を横並び -->
+    <div class="cta-section__actions">
+      <!-- メール（フォームへ） -->
+      <CtaButton href={url('/contact')} variant="solid">
+        メールで問い合わせ
+      </CtaButton>
+    
+      <!-- LINE -->
+      <CtaButton
+        href={lineHref}
+        variant="line"
+        ga="lineCV"
+        external={Boolean(settings.lineUrl)}
+      >
+        LINEで相談する
+      </CtaButton>
+    
+      <!-- 電話（受話器アイコン＋番号）。variant は要相談（下記参照） -->
+      <CtaButton href={telHref} variant="outline" ga="phoneCV">
+        <!-- アイコンと番号を1つの span で包み、横並び・中央そろえを保証する -->
+        <span class="cta-section__tel-inner">
+          <svg class="cta-section__tel-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M6.5 4h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 6a2 2 0 0 1 2-2z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linejoin="round"
+            ></path>
+          </svg>
+          {phone}
+        </span>
+      </CtaButton>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-section {
+    background-color: var(--pale-beige);
+    padding-block: var(--space-section-y);
+  }
+
+  .cta-section__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    text-align: center;
+  }
+
+  .cta-section__en {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    color: var(--green);
+    letter-spacing: 0.08em;
+  }
+
+  .cta-section__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+    color: var(--charcoal);
+    margin-block: 12px 20px;
+  }
+
+  .cta-section__lead {
+    line-height: 1.5;
+    color: var(--dark-gray);
+    margin-bottom: 56px;
+  }
+.cta-section__actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .cta-section__tel-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cta-section__tel-icon {
+    width: 1.5em;
+    height: 1.5em;
+    flex-shrink: 0;
+  }
+  
+  @media (min-width: 768px) {
+    .cta-section__actions {
+      flex-direction: row;
+      justify-content: center;
+    }
+  }
+</style>

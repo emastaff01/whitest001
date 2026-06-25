@@ -1,0 +1,37 @@
+---
+// =============================================================
+// src/pages/index.astro （TOPページ）
+// -------------------------------------------------------------
+// =============================================================
+
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/home/Hero.astro';
+import BannerSlider from '../components/home/BannerSlider.astro';
+import ConceptSection from '../components/home/ConceptSection.astro';
+import FloatingNav from '../components/common/FloatingNav.astro';
+import RenewalOpenSection from '../components/home/RenewalOpenSection.astro';
+import ChapelSection from '../components/home/ChapelSection.astro';
+import BanquetSection from '../components/home/BanquetSection.astro';
+import CuisineSection from '../components/home/CuisineSection.astro';
+import PlanSection from '../components/home/PlanSection.astro';
+import FairSection from '../components/home/FairSection.astro';
+import ReportSection from '../components/home/ReportSection.astro';
+import NewsSection from '../components/home/NewsSection.astro';
+import CtaSection from '../components/common/CtaSection.astro';
+---
+
+<BaseLayout title="ホワイトハウス伊万里｜佐賀県初の1棟1組完全貸切ウェディング">
+  <Hero />
+  <BannerSlider />
+  <ConceptSection />
+  <RenewalOpenSection />
+  <ChapelSection />
+  <BanquetSection />
+  <CuisineSection />
+  <PlanSection />
+  <FairSection />
+  <ReportSection />
+  <NewsSection />
+  <CtaSection />
+  <FloatingNav />
+</BaseLayout>

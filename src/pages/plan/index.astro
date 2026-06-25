@@ -1,0 +1,79 @@
+---
+// =============================================================
+// src/pages/plan/index.astro （結婚式プラン一覧ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/plan/
+// ・公開中の全プランを PlanCard で一覧表示（fair/index.astro と同じ構成）。
+// ・最終CTAセクションも置いてCV導線を確保。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import PlanCard from '../../components/plan/PlanCard.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getPlans } from '../../lib/getPlans';
+
+const plans = getPlans();
+---
+
+<BaseLayout
+  title="結婚式プラン一覧｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里の結婚式プラン一覧。1棟貸切ウェディングから少人数・家族婚まで、ふたりのスタイルにあわせてお選びいただけます。"
+>
+  <PageHeader
+    overline="PLAN"
+    title="結婚式プランを探す"
+    description="邸宅貸切から少人数まで、基本プランをご用意しています。詳細はお気軽にご相談ください。"
+  />
+
+  <section class="plan-list">
+    <div class="plan-list__inner">
+      {
+        plans.length === 0 ? (
+          <p class="plan-list__empty">現在ご案内中のプランはありません。</p>
+        ) : (
+          <div class="plan-list__grid">
+            {plans.map((plan) => <PlanCard plan={plan} />)}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .plan-list {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .plan-list__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .plan-list__empty {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--gray);
+    padding: 80px 0;
+  }
+  .plan-list__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: clamp(28px, 3vw, 40px);
+  }
+  @media (max-width: 900px) {
+    .plan-list__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .plan-list__grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+</style>

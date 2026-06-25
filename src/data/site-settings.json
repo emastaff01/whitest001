@@ -1,0 +1,24 @@
+{
+  "siteName": "ホワイトハウス伊万里",
+  "logo": "/images/logo-placeholder.png",
+  "nap": {
+    "name": "ホワイトハウス伊万里",
+    "postalCode": "848-0041",
+    "address": "佐賀県伊万里市新天町520-6",
+    "phone": "0955-22-2021"
+  },
+  "businessHours": "10:00 - 20:00",
+  "closedDays": "毎週火曜日・水曜日（祝日除く）",
+  "access": "JR伊万里駅徒歩10分",
+  "parking": "敷地内駐車場あり（20台・無料）",
+  "lineUrl": "",
+  "instagramUrl": "",
+  "partnerLinks": [
+    { "label": "Tiara ブティック", "url": "https://tiara-boutique.net" },
+    { "label": "ロイヤルチェスター伊万里", "url": "https://rc-imari.jp" }
+  ],
+  "renewalOpen": {
+    "displayYearMonth": "2026.06",
+    "displayText": "2026年6月"
+  }
+}

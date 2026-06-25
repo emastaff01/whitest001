@@ -1,0 +1,868 @@
+---
+// =============================================================
+// src/components/admin/NewsPanel.astro
+// -------------------------------------------------------------
+// 管理画面「お知らせ」タブ。PlanPanel.astro と同じ操作体験に揃えたもの。
+// 画面構成:
+//   ・一覧ビュー：サムネ＋タイトル＋公開バッジ＋公開日／カテゴリー／予約状態 の行を並べる。
+//     行クリックで編集ビューへ。
+//   ・編集ビュー：1件だけ表示。「一覧に戻る」で戻る／「Firestore に保存」で確定。
+//   ・並べ替えモード：一覧の「並べ替える」ボタンで切替。モード中だけ
+//     行がドラッグ専用になり（クリックで編集に飛ばない）、≡ で並べ替え。
+//
+// お知らせ固有の項目（プランとの違い）:
+//   ・配列項目（含まれるもの/対象スタイル）や数値項目（価格）は無い。
+//   ・代わりに publishedAt（公開日・必須）と categoryId（カテゴリー・任意／単一選択）がある。
+//   ・thumbnail が「任意」。画像なし記事もあり得るので、空なら undefined にして公開側に出さない。
+//   ・公開の予約：publishStartAt（予約投稿日時）/ publishEndAt（予約非公開日時）を持てる。
+//     ※静的サイトのため、実際に出し入れが反映されるのは「予約日時より後に再ビルドしたとき」。
+//       予約時刻ぴったりの自動反映は自動ビルド化（資料 §8-2）が前提＝フェーズ2。
+//
+// 共通のルール:
+//   ・要素IDは news- で始める（同一ページの他パネルとIDが衝突しないように）。
+//     ※並べ替えリストの id も #news-reorder-list にする（フェアの #fair-reorder-list 等と区別）。
+//   ・スタイルは src/styles/admin.css 側。一覧・並べ替えは fair-list*/fair-reorder* を流用する。
+// =============================================================
+
+import fs from 'node:fs';
+
+// 画像ピッカー用の一覧をビルド時に作る（public/images/news/ の .jpg を列挙）。
+const NEWS_IMG_DIR = 'public/images/news';
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // 末尾スラッシュ除去（例 '/test-whi'）
+let newsImages: { value: string; url: string }[] = [];
+if (fs.existsSync(NEWS_IMG_DIR)) {
+  newsImages = fs
+    .readdirSync(NEWS_IMG_DIR)
+    .filter((f) => f.toLowerCase().endsWith('.jpg'))
+    .sort()
+    .map((f) => ({
+      value: `/images/news/${f}`,
+      url: `${BASE}/images/news/${f}`,
+    }));
+}
+---
+
+<section class="adm-panel" data-panel="news" hidden>
+  <header class="adm-panel__head">
+    <h2 class="adm-panel__title">お知らせ管理
+    <span id="news-count" class="adm-count"></span>
+    <div class="adm-toolbar">
+      <button type="button" id="news-add-btn" class="adm-btn adm-btn--primary">＋ 新規お知らせを追加</button>
+      <button type="button" id="news-export-btn" class="adm-btn adm-btn--export">Firestore に保存</button>
+    </div>
+    </h2>
+    <p class="adm-lead">
+      新着情報の管理ページ
+    </p>
+    <p id="news-status" class="adm-status"></p>
+  </header>
+
+  <div id="news-editor"></div>
+
+  <!-- 画像ピッカー（パネルに1つだけ。各カードの「画像を選ぶ」から共用する） -->
+  <div id="news-picker" class="adm-picker" hidden>
+    <div class="adm-picker__backdrop" data-picker-close></div>
+    <div class="adm-picker__panel" role="dialog" aria-modal="true" aria-label="画像を選択">
+      <div class="adm-picker__head">
+        <h3 class="adm-picker__title">画像を選ぶ（お知らせ）</h3>
+        <button type="button" class="adm-btn adm-btn--mini" data-picker-close>閉じる</button>
+      </div>
+      <div id="news-picker-grid" class="adm-picker__grid"></div>
+    </div>
+  </div>
+
+  <!-- ビルド時に public/images/news/ から作った画像一覧（value=保存値 / url=表示用） -->
+  <script type="application/json" id="news-image-list" is:inline set:html={JSON.stringify(newsImages)}></script>
+</section>
+
+<script>
+  import type { Post } from '../../types';
+  import { countLabel, makeDocId } from '../../lib/admin';
+  // getTaxonomiesFromDb を追加：カテゴリーの選択肢（news-category マスター）を読む
+  import { getPostsFromDb, savePostToDb, deletePostFromDb, getTaxonomiesFromDb } from '../../lib/firestore';
+  import { auth } from '../../lib/firebase';
+  import { onAuthStateChanged } from 'firebase/auth';
+  import Sortable from 'sortablejs'; // 並べ替え（ドラッグ＆ドロップ）。管理画面でのみ読み込む
+
+  // 「画像なし」の合図に使うパス。お知らせでは保存時に undefined へ変換し、公開側に出さない。
+  const NO_IMAGE = '/images/noimage.jpg';
+
+  const init = (): void => {
+    const container = document.querySelector<HTMLElement>('#news-editor');
+    const addBtn = document.querySelector<HTMLButtonElement>('#news-add-btn');
+    const exportBtn = document.querySelector<HTMLButtonElement>('#news-export-btn');
+    const statusEl = document.querySelector<HTMLElement>('#news-status');
+    if (!container || !addBtn || !exportBtn || !statusEl) return;
+
+    let working: Post[] = [];
+    let savedIds = new Set<string>();
+    // 公開状態の「最後に読み込み／保存した時点」のスナップショット（id→公開中か）。
+    // 保存時に「表示↔非表示が変わったお知らせ」を洗い出して確認ポップアップを出すために使う。
+    let savedPub = new Map<string, boolean>();
+
+    // 「最後に読み込み／保存した時点」の各お知らせの中身スナップショット（id→{内容文字列, タイトル}）。
+    // 今の working と見比べて「変更されたお知らせ」を特定するために使う。
+    let savedSnap = new Map<string, { content: string; title: string }>();
+    // 同じく、保存／読み込み時点の並び順（id を連結した文字列）。表示順だけ変わった検知に使う。
+    let savedOrderSig = '';
+
+    // カテゴリーの選択肢（マスター news-category）。load() で取得し、描画と取り込みで参照する。
+    let categoryOptions: { id: string; label: string }[] = [];
+    // 並べ替え用 Sortable インスタンス。再描画のたびに作り直す（破棄→生成）。
+    let sortable: Sortable | null = null;
+
+    // ---- 画面の状態 ----
+    let view: 'list' | 'edit' = 'list'; // いま一覧か編集か
+    let editingIndex = -1;              // 編集中お知らせの working 内の位置（一覧時は -1）
+    let reorderMode = false;            // 並べ替えモードON/OFF（一覧ビューでのみ意味を持つ）
+
+    // ---- セレクタ生成（data-* 属性で要素を一意に指す）----
+    const fieldSel = (ni: number, field: string): string =>
+      `[data-ni="${ni}"][data-field="${field}"]`;
+
+    // ---- 値の読み取り（DOM → 値）----
+    const valOf = (sel: string): string => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value.trim() : '';
+    };
+    const rawValOf = (sel: string): string => {
+      // textarea の改行を保つため trim しない読み取り（本文用）
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value : '';
+    };
+
+    // ---- 値の書き込み（値 → DOM）----
+    const setVal = (sel: string, v: string): void => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      if (el) el.value = v;
+    };
+
+    // ---- ラジオ（カテゴリー）の読み書き ----
+    // チェックされている radio の value を返す（未選択は ''）。
+    const radioValOf = (ni: number, field: string): string => {
+      const el = container.querySelector<HTMLInputElement>(
+        `[data-ni="${ni}"][data-field="${field}"]:checked`,
+      );
+      return el ? el.value : '';
+    };
+    // value が一致する radio をチェック状態にする（未設定は value="" の「なし」が選ばれる）。
+    const setRadioChecked = (ni: number, field: string, value: string): void => {
+      const radios = container.querySelectorAll<HTMLInputElement>(
+        `[data-ni="${ni}"][data-field="${field}"]`,
+      );
+      radios.forEach((r) => {
+        r.checked = r.value === value;
+      });
+    };
+
+    // 任意の数値項目（sortOrder）用。空文字や数値でない入力は「未設定（undefined）」として扱う。
+    const numOrUndef = (sel: string): number | undefined => {
+      const s = valOf(sel);
+      const n = Number(s);
+      return s === '' || Number.isNaN(n) ? undefined : n;
+    };
+
+    // 文字列を HTML に安全に埋め込む（一覧のタイトル等。'<' などを実体参照に変換）
+    const escapeHtml = (s: string): string =>
+      s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c)
+      );
+
+    // 保存値(base無し /images/...) → 画面表示URL(base付き)。frontmatter の BASE とは別スコープ
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+    const toUrl = (src: string): string => (src ? `${BASE}${src}` : '');
+    // サムネ欄のプレビュー画像を更新（空なら src を外して隠す）
+    const setThumbPreview = (ni: number, src: string, alt: string): void => {
+      const img = container.querySelector<HTMLImageElement>(`[data-ni="${ni}"][data-thumb-preview]`);
+      if (!img) return;
+      if (src) {
+        img.src = toUrl(src);
+        img.hidden = false;
+      } else {
+        img.removeAttribute('src');
+        img.hidden = true;
+      }
+      img.alt = alt ?? '';
+    };
+
+    // ---- ファイル名 / フルパスのヘルパー ----
+    const fileNameOf = (src: string): string => src.split('/').pop() ?? '';
+    // サムネ欄に「表示＝ファイル名／保存＝フルパス」をセット。
+    // 「画像なし」(空 or noimage)のときは欄を空にしてプレビューも隠す＝「画像なし」と読めるように。
+    const setThumbField = (ni: number, fullPath: string): void => {
+      const noImage = fullPath === '' || fullPath === NO_IMAGE;
+      const input = container.querySelector<HTMLInputElement>(fieldSel(ni, 'thumbnailSrc'));
+      if (input) {
+        input.value = noImage ? '' : fileNameOf(fullPath); // 画像なしは空欄（placeholderが出る）
+        input.dataset.fullpath = noImage ? '' : fullPath;  // 保存用フルパス（画像なしは空）
+      }
+      setThumbPreview(ni, noImage ? '' : fullPath, ''); // 画像なしはプレビュー非表示
+    };
+    const fullPathOf = (ni: number): string => {
+      const input = container.querySelector<HTMLInputElement>(fieldSel(ni, 'thumbnailSrc'));
+      return input?.dataset.fullpath ?? '';
+    };
+
+    // ---- 日付・日時の整形（new Date を使わず文字列分解＝UTCずれ回避）----
+    // 'YYYY-MM-DD' → 'YYYY/M/D'
+    const formatYMD = (ymd: string): string => {
+      const [y, m, d] = ymd.split('-');
+      if (!y || !m || !d) return ymd;
+      return `${y}/${Number(m)}/${Number(d)}`;
+    };
+    // 'YYYY-MM-DDTHH:mm' → 'YYYY/M/D HH:mm'（予約日時の表示用）
+    const formatDateTime = (s: string): string => {
+      if (!s) return '';
+      const [datePart, timePart] = s.split('T');
+      const ymd = formatYMD(datePart ?? '');
+      return timePart ? `${ymd} ${timePart}` : ymd;
+    };
+    // 一覧に出す予約の注記（予約投稿／予約非公開）。両方空なら ''。
+    const scheduleNote = (post: Post): string => {
+      const parts: string[] = [];
+      if (post.publishStartAt) parts.push(`${formatDateTime(post.publishStartAt)} 公開予定`);
+      if (post.publishEndAt) parts.push(`${formatDateTime(post.publishEndAt)} 非公開予定`);
+      return parts.join(' / ');
+    };
+
+    // オブジェクトのキー順に依存せず比較できるよう、キーを再帰的にソートして JSON 化する。
+    // （harvest がプロパティを入れ直すとキー順が変わり得るため、素の JSON.stringify では誤検知する）
+    const sortedJson = (obj: unknown): string => {
+      const sortKeys = (x: unknown): unknown => {
+        if (Array.isArray(x)) return x.map(sortKeys);
+        if (x !== null && typeof x === 'object') {
+          const o = x as Record<string, unknown>;
+          const out: Record<string, unknown> = {};
+          for (const k of Object.keys(o).sort()) out[k] = sortKeys(o[k]);
+          return out;
+        }
+        return x;
+      };
+      return JSON.stringify(sortKeys(obj));
+    };
+
+    // 比較用の「中身」文字列。sortOrder（並び順）は別枠で見るので除外、alt はタイトルからの
+    // 自動派生なので src だけ見る。＝こうしないと「開いただけ」「並べ替えただけ」で誤検知する。
+    const contentOf = (p: Post): string => {
+      const { sortOrder, thumbnail, ...rest } = p;
+      void sortOrder;
+      return sortedJson({ ...rest, thumbnail: thumbnail ? { src: thumbnail.src } : undefined });
+    };
+
+    // 今の working を「保存済み」として記録する（読み込み後・保存成功後に呼ぶ）。
+    const snapshotSaved = (): void => {
+      savedSnap = new Map(
+        working.map((p): [string, { content: string; title: string }] => [
+          p.id,
+          { content: contentOf(p), title: p.title },
+        ])
+      );
+      savedOrderSig = working.map((p) => p.id).join(',');
+    };
+
+    // 未保存のお知らせのラベル一覧を返す（修正／新規作成／削除／並び替え）。空配列なら未保存なし。
+    const unsavedLabels = (): string[] => {
+      harvest(); // 編集中の1件を working に反映してから比べる（入力途中も取りこぼさない）
+      const labels: string[] = [];
+      const currentIds = new Set(working.map((p) => p.id));
+      working.forEach((p) => {
+        const snap = savedSnap.get(p.id);
+        if (!snap) labels.push(`【新規作成】${p.title || '（無題）'}`);
+        else if (snap.content !== contentOf(p)) labels.push(`【修正】${p.title || '（無題）'}`);
+      });
+      savedSnap.forEach((snap, id) => {
+        if (!currentIds.has(id)) labels.push(`【削除】${snap.title || id}`);
+      });
+      const sameMembers =
+        currentIds.size === savedSnap.size && [...currentIds].every((id) => savedSnap.has(id));
+      if (sameMembers && working.map((p) => p.id).join(',') !== savedOrderSig) {
+        labels.push('【並び替え】');
+      }
+      return labels;
+    };
+
+    // 未保存があれば status 欄に内容を出す。無ければ status を空にする。
+    // 「一覧に戻る瞬間」「並べ替えモード終了時」だけ呼ぶ（入力のたびには呼ばない＝編集中は静かなまま）。
+    const noticeUnsaved = (): void => {
+      const labels = unsavedLabels();
+      if (labels.length === 0) {
+        setStatus('', '');
+        return;
+      }
+      setStatus('未保存の内容があります。\n' + labels.join('\n'), 'warn');
+    };
+
+    // ---- 手動サンプルの欠損補完 ----
+    // 必須の文字列/真偽値を安全な初期値で補う（画面に "undefined" を出さないため）。
+    // thumbnail / categoryId / 予約日時 は任意なので触らない。
+    const normalizePost = (p: Post): Post => ({
+      ...p,
+      title: p.title ?? '',
+      body: p.body ?? '',
+      publishedAt: p.publishedAt ?? '', // 必須。空なら validate で警告する設計はそのまま
+      isPublished: p.isPublished ?? false,
+    });
+
+    // ---- 画面 → working（1件分）----
+    const harvestPost = (post: Post, ni: number): void => {
+      post.id = valOf(fieldSel(ni, 'id'));
+      post.title = valOf(fieldSel(ni, 'title'));
+      post.body = rawValOf(fieldSel(ni, 'body')).trim(); // 前後の空白だけ除去（中の改行は残す）
+      post.publishedAt = valOf(fieldSel(ni, 'publishedAt')); // 必須。空でも型は通るので validate で警告
+
+      // 公開状態：セレクト（published/hidden）を真偽に変換。'published' のときだけ true。
+      post.isPublished = valOf(fieldSel(ni, 'isPublished')) === 'published';
+
+      // カテゴリー（任意・単一）。選択された radio の value（マスターの id）。「なし」(value="") は undefined。
+      const catId = radioValOf(ni, 'categoryId');
+      post.categoryId = catId === '' ? undefined : catId;
+      // 旧フィールド category（移行前の文字列）が残っていれば取り除く（保存時に古い項目を消す）。
+      delete (post as { category?: string }).category;
+
+      // 予約日時（任意・datetime-local）。空なら undefined（JSONに出さない）。
+      const startAt = valOf(fieldSel(ni, 'publishStartAt'));
+      const endAt = valOf(fieldSel(ni, 'publishEndAt'));
+      post.publishStartAt = startAt === '' ? undefined : startAt;
+      post.publishEndAt = endAt === '' ? undefined : endAt;
+
+      // 親切機能：予約投稿日時があるのに公開日が空なら、公開日へその日付を自動で補う（二重入力を減らす）。
+      if (post.publishedAt === '' && post.publishStartAt) {
+        post.publishedAt = post.publishStartAt.slice(0, 10); // 'YYYY-MM-DDTHH:mm' → 'YYYY-MM-DD'
+      }
+
+      // 表示順（並べ替えで管理。値の往復は hidden input 経由）。
+      post.sortOrder = numOrUndef(fieldSel(ni, 'sortOrder'));
+
+      // キャッチ画像（任意）。画像なし（空 or noimage）なら undefined。
+      // 画像ありなら src は data-fullpath（フルパス）、alt はタイトルを自動採用。
+      const src = fullPathOf(ni);
+      post.thumbnail = src === '' || src === NO_IMAGE ? undefined : { src, alt: post.title };
+    };
+    // 編集中の1件だけを working に退避する（一覧・並べ替え時はカードが無いので何もしない）
+    const harvest = (): void => {
+      if (view !== 'edit' || editingIndex < 0) return;
+      const post = working[editingIndex];
+      if (post) harvestPost(post, editingIndex);
+    };
+
+    // ---- working → 画面（1件分）----
+    const populatePost = (post: Post, ni: number): void => {
+      setVal(fieldSel(ni, 'id'), post.id);
+      setVal(fieldSel(ni, 'title'), post.title);
+      setVal(fieldSel(ni, 'body'), post.body);
+      setVal(fieldSel(ni, 'publishedAt'), post.publishedAt);
+      setRadioChecked(ni, 'categoryId', post.categoryId ?? '');
+      // 真偽 → セレクトの値（published/hidden）。false は「非表示」。
+      setVal(fieldSel(ni, 'isPublished'), post.isPublished ? 'published' : 'hidden');
+      setVal(fieldSel(ni, 'publishStartAt'), post.publishStartAt ?? '');
+      setVal(fieldSel(ni, 'publishEndAt'), post.publishEndAt ?? '');
+      setVal(fieldSel(ni, 'sortOrder'), post.sortOrder === undefined ? '' : String(post.sortOrder));
+      // thumbnail が無い＝「画像なし」。setThumbField が空欄＋プレビュー非表示にする。
+      setThumbField(ni, post.thumbnail?.src ?? '');
+
+      // 予約日時が入っているときは「公開の予約」折りたたみを開いて見せる。
+      const det = container.querySelector<HTMLDetailsElement>(`details[data-ni="${ni}"]`);
+      if (det && (post.publishStartAt || post.publishEndAt)) det.open = true;
+    };
+    // 編集中の1件だけを画面に流し込む
+    const populateOne = (ni: number): void => {
+      const post = working[ni];
+      if (post) populatePost(post, ni);
+    };
+
+    // ---- HTML 組み立て（値は入れず、構造と data-* だけを作る）----
+    const newsCard = (_post: Post, ni: number): string => {
+      // カテゴリーのラジオ（先頭に「なし」＝未設定）。選択肢はマスター(news-category)から。
+      const catRadios =
+        `<label class="adm-radio"><input type="radio" name="news-cat-${ni}" data-ni="${ni}" data-field="categoryId" value="" /> なし</label>` +
+        categoryOptions
+          .map(
+            (o) =>
+              `<label class="adm-radio"><input type="radio" name="news-cat-${ni}" data-ni="${ni}" data-field="categoryId" value="${o.id}" /> ${escapeHtml(o.label)}</label>`
+          )
+          .join('');
+      return `
+      <section class="adm-card">
+        <div class="adm-card__head">
+          <h2>No. ${ni + 1}</h2>
+          <label class="adm-title"><span class="adm-title__title">タイトル</span>
+            <input type="text" data-ni="${ni}" data-field="title" />
+          </label>
+          <label class="adm-pub"><span class="adm-pub__title">公開状態</span>
+            <select data-ni="${ni}" data-field="isPublished">
+              <option value="hidden">非表示</option>
+              <option value="published">表示</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="adm-id"><span class="adm-id__title">ID（自動発番・編集不可）</span>
+          <input type="text" data-ni="${ni}" data-field="id" readonly />
+        </label>
+
+        <div class="adm-card__body">
+          <div class="adm-row">
+            <div class="adm-card__first">
+              <label class="adm-field adm-field--narrow"><span class="adm-field-title">公開日（必須）</span>
+                <input type="date" data-ni="${ni}" data-field="publishedAt" />
+              </label>
+              <div class="adm-field"><span class="adm-field-title">カテゴリー（任意・選択式）</span>
+                <div class="adm-radios">${catRadios}</div>
+              </div>
+              <p class="adm-hint">カテゴリーは「タグ／カテゴリー」タブで管理している選択肢から選びます（候補が無いときはそのタブで追加してください）。</p>
+              <details class="adm-collapse" data-ni="${ni}">
+                <summary class="adm-collapse__summary">公開の予約（任意）</summary>
+                <div class="adm-row">
+                  <label class="adm-field adm-field--narrow">予約投稿日時
+                    <input type="datetime-local" data-ni="${ni}" data-field="publishStartAt" />
+                  </label>
+                  <label class="adm-field adm-field--narrow">予約非公開日時
+                    <input type="datetime-local" data-ni="${ni}" data-field="publishEndAt" />
+                  </label>
+                </div>
+                <p class="adm-hint">予約投稿日時を入れると、その日時以降に公開されます（空なら即時／上の「公開状態」に従う）。予約非公開日時を入れると、その日時で自動的に非公開になります（記事データは残ります）。※静的サイトのため、実際に切り替わるのは予約日時より後にサイトを再ビルドしたタイミングです。</p>
+              </details>
+
+            </div>
+            <div class="adm-card__second">
+              <label class="adm-field"><span class="adm-field-title">キャッチ画像（任意）</span></label>
+              <div class="adm-thumb">
+                <img class="adm-thumb__preview" data-ni="${ni}" data-thumb-preview alt="" hidden />
+                <div class="adm-row">
+                  <input type="text" data-ni="${ni}" data-field="thumbnailSrc" readonly placeholder="（「画像を選ぶ」から選択）" />
+                  <button type="button" class="adm-btn adm-btn--mini" data-action="pick-thumb" data-ni="${ni}">画像を選ぶ</button>
+                </div>
+                <p class="adm-hint">画像は任意。「画像なし」を選ぶと公開サイトには画像を出しません。</p>
+              </div>
+            </div>
+          </div>
+          <label class="adm-field"><span class="adm-field-title">本文</span>
+            <textarea rows="6" data-ni="${ni}" data-field="body"></textarea>
+          </label>
+          <p class="adm-hint">本文の改行はそのまま表示されます。</p>
+
+          <!-- 表示順は「並べ替え」で管理するので画面には出さない。
+               ただし値の往復（populate→harvest）に input は必要なので hidden で残す。 -->
+          <input type="hidden" data-ni="${ni}" data-field="sortOrder" />
+          <button type="button" class="adm-btn adm-btn--danger" data-action="del-news" data-ni="${ni}">お知らせ削除</button>
+        </div>
+      </section>`;
+    };
+
+    // ---- 一覧ビューの行（クリックで編集へ。data-field を持たせない＝harvest に拾われない）----
+    // 左にサムネ、右にタイトル＋公開バッジ＋公開日／カテゴリー／予約 を縦に積む。
+    // CSSは fair-list* を流用（フェア・プランと同じ見た目・admin.css 無改修）。
+    const newsListItem = (post: Post, ni: number): string => {
+      const thumbUrl = toUrl(post.thumbnail?.src || NO_IMAGE);                 // 画像なしは noimage を出す
+      const catText = (categoryOptions.find((o) => o.id === post.categoryId)?.label) || '未設定';
+      const dateText = post.publishedAt ? formatYMD(post.publishedAt) : '未設定';
+      const sched = scheduleNote(post);
+      const schedRow = sched
+        ? `<span class="fair-list__meta"><span class="fair-list__key">予約</span>${escapeHtml(sched)}</span>`
+        : '';
+      return `
+      <li class="fair-list__row">
+        <button type="button" class="fair-list__btn" data-action="edit-news" data-ni="${ni}">
+          <span class="fair-list__thumb">
+            <img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(post.title)}" loading="lazy" />
+          </span>
+          <span class="fair-list__main">
+            <span class="fair-list__titlerow">
+              <span class="fair-list__no">No. ${ni + 1}</span>
+              <span class="fair-list__title">${escapeHtml(post.title) || '（無題）'}</span>
+              <span class="fair-list__badge ${post.isPublished ? 'is-pub' : 'is-unpub'}">${post.isPublished ? '表示' : '非表示'}</span>
+            </span>
+            <span class="fair-list__meta"><span class="fair-list__key">公開日</span>${escapeHtml(dateText)}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">カテゴリー</span>${escapeHtml(catText)}</span>
+            ${schedRow}
+          </span>
+        </button>
+      </li>`;
+    };
+
+    // ---- 並べ替えモードの行（ドラッグ専用。クリックで編集に飛ばない＝<button>にしない）----
+    const reorderItem = (post: Post, ni: number): string => `
+      <li class="fair-reorder__item" data-reorder-index="${ni}">
+        <span class="fair-reorder__handle" aria-hidden="true">≡</span>
+        <span class="fair-reorder__no">No. ${ni + 1}</span>
+        <span class="fair-reorder__title">${escapeHtml(post.title) || '（無題）'}</span>
+      </li>`;
+
+    // ---- 一覧ビュー全体（通常 or 並べ替えモード）----
+    // ※ 並べ替えリストの id は #news-reorder-list（他パネルのリストと区別する）。
+    const listViewHtml = (): string => {
+      if (reorderMode) {
+        const items = working.map((p, i) => reorderItem(p, i)).join('');
+        return `
+        <div class="fair-list">
+          <div class="fair-list__bar">
+            <button type="button" class="adm-btn" data-action="toggle-reorder">並べ替えを終了</button>
+            <span class="adm-hint">≡ をドラッグして表示順を入れ替え。終わったら「Firestore に保存」で確定します。</span>
+          </div>
+          <ul class="fair-reorder__list" id="news-reorder-list">${items}</ul>
+        </div>`;
+      }
+      const items = working.map((p, i) => newsListItem(p, i)).join('');
+      const empty =
+        working.length === 0
+          ? `<p class="adm-hint">お知らせがありません。「＋ 新規お知らせを追加」から作成してください。</p>`
+          : '';
+      return `
+      <div class="fair-list">
+        <div class="fair-list__bar">
+          <button type="button" class="adm-btn" data-action="toggle-reorder" hidden>並べ替える</button>
+        </div>
+        <ul class="fair-list__items">${items}</ul>
+        ${empty}
+      </div>`;
+    };
+
+    // ---- 編集ビュー全体（1件のカード＋戻るボタン）----
+    const editViewHtml = (ni: number): string => `
+      <div class="fair-edit">
+        <div class="fair-edit__bar">
+          <button type="button" class="adm-btn" data-action="back-to-list">← 一覧に戻る</button>
+        </div>
+        ${newsCard(working[ni]!, ni)}
+      </div>`;
+
+    // 並べ替え一覧に Sortable を初期化（並べ替えモードのときだけ呼ぶ）。
+    const initSortable = (): void => {
+      const listEl = container.querySelector<HTMLElement>('#news-reorder-list');
+      if (!listEl) return;
+      sortable?.destroy(); // 古いインスタンスを破棄（DOM を作り直すので二重登録を防ぐ）
+      sortable = Sortable.create(listEl, {
+        handle: '.fair-reorder__handle', // ハンドル（≡）部分だけドラッグ可能にする
+        animation: 150,
+        onEnd: (evt) => {
+          const from = evt.oldIndex;
+          const to = evt.newIndex;
+          if (from === undefined || to === undefined || from === to) return;
+          const moved = working.splice(from, 1)[0]; // 動かした1件を抜き出す
+          if (!moved) return;
+          working.splice(to, 0, moved); // 新しい位置に挿し込む
+          working.forEach((p, i) => {
+            p.sortOrder = i; // 上から 0,1,2… に振り直す
+          });
+          render(); // 一覧を新しい順で描き直す（Sortable も貼り直される）
+        },
+      });
+    };
+
+    // ---- 描画（state を見て一覧/編集を出し分ける）----
+    const render = (): void => {
+      sortable?.destroy(); // どのビューでも一旦破棄。並べ替えモードのときだけ後で貼り直す
+      sortable = null;
+
+      if (view === 'edit' && editingIndex >= 0 && working[editingIndex]) {
+        container.innerHTML = editViewHtml(editingIndex);
+        populateOne(editingIndex); // 1件分だけ値を流し込む
+      } else {
+        // 編集対象が無ければ一覧に戻す（安全側）
+        view = 'list';
+        editingIndex = -1;
+        container.innerHTML = listViewHtml();
+        if (reorderMode) initSortable();
+      }
+
+      addBtn.hidden = view === 'edit'; // 編集中は「＋新規追加」を隠す（一覧でのみ追加）
+      const countEl = document.querySelector<HTMLSpanElement>('#news-count');
+      if (countEl) countEl.textContent = countLabel(working);
+    };
+
+    // ステータス表示
+    const setStatus = (msg: string, kind: 'ok' | 'warn' | ''): void => {
+      statusEl.textContent = msg;
+      statusEl.className = 'adm-status' + (kind ? ' is-' + kind : '');
+    };
+
+    // 今日の日付を日本時間で 'YYYY-MM-DD' にして返すヘルパー。
+    // ・公開日(publishedAt)の初期値に使う。
+    // ・new Date("2026-...") のUTCズレを避けるため、UTCの絶対時刻に9時間足して
+    //   UTCゲッターで読み、確実にJSTの年月日を取り出す（getPosts.ts と同じ流儀）。
+    const todayJST = (): string => {
+      const now = new Date();
+      const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000); // UTC基準に+9時間ずらす
+      const p = (n: number) => String(n).padStart(2, '0');      // 9 -> "09" の0埋め
+      return `${jst.getUTCFullYear()}-${p(jst.getUTCMonth() + 1)}-${p(jst.getUTCDate())}`;
+    };
+    
+    // 新規お知らせのひな型（必須項目だけ）。thumbnail は任意なので持たせない。
+    // id は makeDocId('n') で自動発番（新規作成時のみ）。'n' はお知らせ（posts）用の接頭辞。
+    // publishedAt は「新規追加した日（今日・JST）」を初期値にする＝公開日＝作成日。
+    const blankPost = (): Post => ({
+      id: makeDocId('n'),
+      title: '',
+      body: '',
+      publishedAt: todayJST(), // 今日の日付（JST）。公開側の並び順もこの値で決まる
+      isPublished: false,
+    });
+    // 書き出し前の簡易チェック（ビルド・表示・SEOで効いてくる項目だけ）
+    const validate = (): string[] => {
+      const errs: string[] = [];
+      const seen = new Set<string>();
+      working.forEach((post, i) => {
+        // 一覧では1件ずつしか見えないので、どのお知らせの問題か分かるよう「No.＋タイトル」で示す
+        const label = `No.${i + 1}${post.title ? `「${post.title}」` : '（無題）'}`;
+        if (post.id === '') errs.push(`${label}: ID が空です`);
+        else if (seen.has(post.id)) errs.push(`${label}: ID「${post.id}」が重複しています`);
+        seen.add(post.id);
+        if (post.title === '') errs.push(`${label}: タイトルが空です`);
+        if (post.publishedAt === '') errs.push(`${label}: 公開日が未入力です（構造化データに必要）`);
+        // 予約：両方入っていて「非公開 ≦ 投稿」なら順序が逆（文字列比較で時系列が判定できる）
+        if (post.publishStartAt && post.publishEndAt && post.publishEndAt <= post.publishStartAt)
+          errs.push(`${label}: 予約非公開日時が予約投稿日時より前（または同じ）です`);
+      });
+      return errs;
+    };
+
+    // ---- 画像ピッカー（パネルに1つ。各カードの「画像を選ぶ」から共用）----
+    const picker = document.querySelector<HTMLElement>('#news-picker');
+    const pickerGrid = document.querySelector<HTMLElement>('#news-picker-grid');
+    let pickerTargetNi = -1; // いま選択対象のカード番号（ni）
+
+    // ビルド時に埋め込んだ画像一覧（value=保存値 / url=表示用）を読む
+    const imageListEl = document.querySelector<HTMLScriptElement>('#news-image-list');
+    const imageList: { value: string; url: string }[] =
+      imageListEl ? JSON.parse(imageListEl.textContent ?? '[]') : [];
+
+    // 先頭に「画像なし（noimage）」タイルを置く。これを選ぶと保存時に thumbnail を持たせない（公開側は非表示）
+    const noImageItem = `
+      <button type="button" class="adm-picker__item" data-pick-value="${NO_IMAGE}">
+        <img src="${BASE}${NO_IMAGE}" alt="" loading="lazy" />
+        <span class="adm-picker__name">画像なし</span>
+      </button>`;
+
+    // グリッドは中身が固定なので一度だけ組み立てる（先頭=画像なし、続けて news フォルダの画像）
+    if (pickerGrid) {
+      pickerGrid.innerHTML =
+        noImageItem +
+        imageList
+          .map(
+            (img) => `
+        <button type="button" class="adm-picker__item" data-pick-value="${img.value}">
+          <img src="${img.url}" alt="" loading="lazy" />
+          <span class="adm-picker__name">${img.value.split('/').pop() ?? ''}</span>
+        </button>`
+          )
+          .join('');
+    }
+
+    const openPicker = (ni: number): void => {
+      if (picker) {
+        pickerTargetNi = ni;
+        picker.hidden = false;
+      }
+    };
+    const closePicker = (): void => {
+      if (picker) {
+        picker.hidden = true;
+        pickerTargetNi = -1;
+      }
+    };
+
+    // サムネ（または「画像なし」）クリック → src 欄へ値を入れ、プレビュー更新 → 閉じる
+    if (pickerGrid) {
+      pickerGrid.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (!(el instanceof Element)) return;
+        const item = el.closest<HTMLButtonElement>('button[data-pick-value]');
+        if (!item || pickerTargetNi < 0) return;
+        const value = item.dataset.pickValue ?? '';
+        setThumbField(pickerTargetNi, value); // 表示=ファイル名/保存=フルパス（画像なしは空欄）
+        closePicker();
+      });
+    }
+
+    // 背景クリック・「閉じる」ボタンで閉じる
+    if (picker) {
+      picker.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (el instanceof Element && el.closest('[data-picker-close]')) closePicker();
+      });
+    }
+
+    // index.astro のタブ切り替えから「未保存のお知らせ一覧」を読めるよう、関数を window に登録する。
+    // 各パネルが自分の data-panel 名で1つずつ登録する想定（フェアは .fair、プランは .plan、ここは .news）。
+    const w = window as unknown as { adminDirtyReporters?: Record<string, () => string[]> };
+    w.adminDirtyReporters = w.adminDirtyReporters ?? {};
+    w.adminDirtyReporters.news = unsavedLabels;
+
+    // ページ離脱（閉じる・再読み込み・別URLへ移動）時、未保存があればブラウザ標準の警告を出す。
+    window.addEventListener('beforeunload', (e) => {
+      if (unsavedLabels().length === 0) return;
+      e.preventDefault();
+    });
+
+    // ---- イベント（構造変更・ナビゲーションはイベント委譲でまとめて受ける）----
+    container.addEventListener('click', (ev) => {
+      const el = ev.target;
+      if (!(el instanceof Element)) return;
+      const btn = el.closest<HTMLButtonElement>('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action ?? '';
+      const ni = btn.dataset.ni !== undefined ? Number(btn.dataset.ni) : -1;
+
+      // 画像ピッカーを開く（harvest 不要）
+      if (action === 'pick-thumb') {
+        openPicker(ni);
+        return;
+      }
+
+      // ---- ナビゲーション系 ----
+      if (action === 'edit-news') {
+        if (ni >= 0) {
+          view = 'edit';
+          editingIndex = ni;
+          render();
+        }
+        return;
+      }
+      if (action === 'back-to-list') {
+        harvest(); // 編集中の内容を working に退避してから戻る（変更は保持される）
+        view = 'list';
+        editingIndex = -1;
+        render();
+        noticeUnsaved(); // 一覧に戻る瞬間だけ、未保存があれば status に表示
+        return;
+      }
+      if (action === 'toggle-reorder') {
+        reorderMode = !reorderMode;
+        render();
+        if (reorderMode) setStatus('並べ替えモードです。≡ をドラッグしてください。', '');
+        else noticeUnsaved(); // 並べ替えモードを抜けた瞬間、未保存があれば status に表示
+        return;
+      }
+
+      // ---- 編集ビュー内のカード操作（削除）----
+      harvest();
+      if (action === 'del-news') {
+        if (ni >= 0 && window.confirm('このお知らせを削除します。よろしいですか？')) {
+          working.splice(ni, 1);
+          view = 'list'; // 削除したら一覧へ戻る
+          editingIndex = -1;
+        }
+      }
+      render();
+    });
+
+    addBtn.addEventListener('click', () => {
+      harvest(); // 編集中があれば退避（一覧なら何もしない）
+      working.push(blankPost());
+      view = 'edit';
+      editingIndex = working.length - 1; // 追加した新規お知らせをそのまま編集ビューで開く
+      render();
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      harvest(); // 編集中の1件を最新化（一覧/並べ替え時は何もしない）
+
+      const errs = validate();
+      if (errs.length > 0) {
+        const ok = window.confirm('入力に確認ポイントがあります。それでも保存しますか？\n\n' + errs.join('\n'));
+        if (!ok) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      // 公開状態（表示↔非表示）が変わるお知らせを洗い出して、まとめて確認する。
+      const pubChanges = working
+        .filter((p) => savedPub.has(p.id) && savedPub.get(p.id) !== p.isPublished)
+        .map((p) => `${p.title || p.id}: ${p.isPublished ? '非表示 → 表示' : '表示 → 非表示'}`);
+      if (pubChanges.length > 0) {
+        const okPub = window.confirm(
+          '公開状態が変わるお知らせがあります。保存してよいですか？\n\n' + pubChanges.join('\n')
+        );
+        if (!okPub) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      // 削除同期：読み込み時にあった id のうち、今 working に無い id を「削除対象」にする。
+      // （ID をリネームした場合も「旧id削除＋新id作成」で正しく置き換わる）
+      const currentIds = new Set(working.map((p) => p.id));
+      const toDelete = [...savedIds].filter((id) => !currentIds.has(id));
+
+      if (toDelete.length > 0) {
+        const okDel = window.confirm(
+          `次の ${toDelete.length} 件を Firestore から削除します（元に戻せません）:\n` + toDelete.join('\n')
+        );
+        if (!okDel) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      exportBtn.disabled = true;
+      const original = exportBtn.textContent ?? '';
+      exportBtn.textContent = '保存中…';
+      setStatus('Firestore に保存しています…', '');
+
+      try {
+        for (const id of toDelete) {
+          await deletePostFromDb(id);
+        }
+        for (const post of working) {
+          await savePostToDb(post);
+        }
+        savedIds = new Set(currentIds);
+        savedPub = new Map(working.map((p): [string, boolean] => [p.id, p.isPublished])); // 公開状態スナップショット更新
+        snapshotSaved(); // 中身・並び順のスナップショットも更新（＝未保存ゼロになる）
+        setStatus(`保存しました（更新 ${working.length} 件 / 削除 ${toDelete.length} 件）。`, 'ok');
+      } catch (e) {
+        console.error('保存失敗:', e);
+        setStatus('保存に失敗しました（ログイン状態・通信・ルールを確認してください）。', 'warn');
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = original;
+      }
+    });
+
+    // ---- Firestore からの読み込み（ログイン確定後だけ呼ぶ）----
+    const load = async (): Promise<void> => {
+      setStatus('読み込み中…', '');
+      try {
+        // お知らせ本体と、カテゴリーの選択肢（マスター news-category）を同時に取得する。
+        const [posts, taxonomies] = await Promise.all([getPostsFromDb(), getTaxonomiesFromDb()]);
+        // news-category の公開中のものだけ、sortOrder 順で選択肢にする。
+        categoryOptions = taxonomies
+          .filter((t) => t.group === 'news-category' && t.isPublished)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+          .map((t) => ({ id: t.id, label: t.label }));
+        working = posts.map(normalizePost);
+        savedIds = new Set(working.map((p) => p.id));
+        savedPub = new Map(working.map((p): [string, boolean] => [p.id, p.isPublished])); // 公開状態スナップショット
+        snapshotSaved(); // 中身・並び順のスナップショット（＝読み込み直後は未保存なし）
+        // 読み込み直後は必ず一覧から（編集状態をリセット）
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        render();
+        setStatus('', ''); // 読み込み直後は未保存なし＝status は空にする
+      } catch (e) {
+        console.error('読み込み失敗:', e);
+        setStatus('読み込みに失敗しました（ログイン状態・通信を確認してください）。', 'warn');
+      }
+    };
+
+    // ログイン状態が確定してから読み込む（ルールが auth != null のため、認証前に読むと permission-denied）。
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        load();
+      } else {
+        working = [];
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        savedPub = new Map();
+        savedSnap = new Map();
+        savedOrderSig = '';
+        render();
+      }
+    });
+  };
+
+  init();
+</script>

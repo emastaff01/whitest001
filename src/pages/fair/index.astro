@@ -1,0 +1,79 @@
+---
+// =============================================================
+// src/pages/fair/index.astro （ブライダルフェア一覧ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/fair/
+// ・公開中の全フェアを FairCard で一覧表示。
+// ・最終CTA（最終CTAセクション）も置いてCV導線を確保。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import FairCard from '../../components/fair/FairCard.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getFairs } from '../../lib/getFairs';
+
+const fairs = getFairs();
+---
+
+<BaseLayout
+  title="ブライダルフェア一覧｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里で開催中のブライダルフェア一覧。模擬挙式・無料試食・館内見学・相談会など、用途にあわせてお選びいただけます。"
+>
+  <PageHeader
+    overline="FAIR"
+    title="ブライダルフェアを探す"
+    description="見学・試食・相談ができるフェアを開催中です。お気軽にお申し込みください。"
+  />
+
+  <section class="fair-list">
+    <div class="fair-list__inner">
+      {
+        fairs.length === 0 ? (
+          <p class="fair-list__empty">現在開催予定のフェアはありません。</p>
+        ) : (
+          <div class="fair-list__grid">
+            {fairs.map((fair) => <FairCard fair={fair} />)}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .fair-list {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .fair-list__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .fair-list__empty {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--gray);
+    padding: 80px 0;
+  }
+  .fair-list__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: clamp(28px, 3vw, 40px);
+  }
+  @media (max-width: 900px) {
+    .fair-list__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .fair-list__grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+</style>

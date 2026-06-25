@@ -1,0 +1,381 @@
+---
+// src/pages/contact/index.astro
+// 共通のお問い合わせフォームページ
+// 今回は「画面（入力欄・入力チェック）」のみ。送信処理（メール送信）は後日実装。
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHeader from "../../components/common/PageHeader.astro";
+import { url } from "../../lib/url";
+import { getPlans } from "../../lib/getPlans"; 
+
+// ビルド時に公開中フェアを取得し、{ id: 表示名 } の早見表を作る
+const plans = getPlans(); // get〜が同期でも await を付けて問題なし（将来Firestore=非同期化にも耐える）
+const planNames = Object.fromEntries(
+  plans.map((p) => [p.id, p.title]) 
+);
+
+
+const pageTitle = "お問い合わせ";
+const pageDescription = "ホワイトハウス伊万里へのお問い合わせはこちらから。";
+const thanksUrl = url("/contact-plan/thanks/");
+---
+
+<BaseLayout title={pageTitle} description={pageDescription}>
+  <PageHeader title="お問い合わせ" overline="CONTACT PLAN" />
+
+  <section class="contact">
+	<div class="contact__inner">
+	  <p class="contact__lead">
+		ご見学・各種ご相談など、お気軽にお問い合わせください。<br />
+		<span class="contact__required-note">「<span class="required-mark">必須</span>」の項目は必ずご入力ください。</span>
+	  </p>
+
+	  {/* novalidate は付けない＝ブラウザ標準の入力チェックを活かす */}
+	  {/* action / method は送信処理を実装する段階で設定する。今はあえて未設定 */}
+	  <form class="contact-form" id="contactForm">
+	  {/* お問い合わせ対象（フェア名）。JSがURLのIDから名前を引いて表示。該当なしは非表示のまま */}
+	  <p id="contactTarget" class="contact__target" hidden></p>
+	  
+	  {/* プランID：URLの ?plan_id=... を読み取ってここに入れる */}
+	  <input type="hidden" id="planId" name="plan_id" />
+	  {/* お問い合わせ内容 */}
+	  <div class="form-row" hidden>
+		<label class="form-label" for="category">お問い合わせ内容</label>
+		<select class="form-control" id="category" name="category">
+		  <option value="">選択してください</option>
+		  <option value="visit">来館予約</option>
+			<option value="inquiry">お問い合わせ</option>
+			<option value="document">資料請求</option>
+			<option value="other">その他</option>
+		</select>
+	  </div>
+	  {/* ご希望日*/}
+	  <div class="form-row">
+		<label class="form-label" for="date">ご希望日<span class="required-mark">必須</span></label>
+		<input
+		  class="form-control"
+		  type="text"
+		  id="date"
+		  name="date"
+		  readonly
+		  autocomplete="off"
+		  placeholder="カレンダーから選択"
+		/>
+	  </div>
+		{/* お名前（必須） */}
+		<div class="form-row">
+		  <label class="form-label" for="name">
+			お名前<span class="required-mark">必須</span>
+		  </label>
+		  <input
+			class="form-control"
+			type="text"
+			id="name"
+			name="name"
+			required
+			autocomplete="name"
+			placeholder="例：山田 花子"
+		  />
+		</div>
+
+		{/* フリガナ（任意） */}
+		<div class="form-row">
+		  <label class="form-label" for="kana">フリガナ<span class="required-mark">必須</span></label>
+		  <input
+			class="form-control"
+			type="text"
+			id="kana"
+			name="kana"
+			required
+			autocomplete="off"
+			placeholder="例：ヤマダ ハナコ"
+		  />
+		</div>
+
+		{/* メールアドレス（必須）type="email" でメール形式かを自動チェック */}
+		<div class="form-row">
+		  <label class="form-label" for="email">
+			メールアドレス<span class="required-mark">必須</span>
+		  </label>
+		  <input
+			class="form-control"
+			type="email"
+			id="email"
+			name="email"
+			required
+			autocomplete="email"
+			placeholder="例：info@example.com"
+		  />
+		</div>
+
+		{/* 電話番号　inputmode でスマホに数字キーボードを出す */}
+		<div class="form-row">
+		  <label class="form-label" for="tel">電話番号<span class="required-mark">必須</span></label>
+		  <input
+			class="form-control"
+			type="tel"
+			id="tel"
+			name="tel"
+			inputmode="tel"
+			autocomplete="tel"
+			required
+			placeholder="例：0955-00-0000"
+		  />
+		</div>
+		
+		{/* お問い合わせ内容（必須） */}
+		<div class="form-row">
+		  <label class="form-label" for="message">
+			その他備考欄
+		  </label>
+		  <textarea
+			class="form-control"
+			id="message"
+			name="message"
+			rows="6"
+			placeholder="ご質問・ご相談内容をご記入ください。"
+		  ></textarea>
+		</div>
+
+		{/* プライバシーポリシー同意（必須） */}
+		<div class="form-row form-row--check">
+		  <label class="form-check">
+			<input type="checkbox" name="agree" value="yes" required />
+			<span>
+			  <a href="https://www.memolead.co.jp/privacy/" class="contact__link">プライバシーポリシー</a>に同意します<span class="required-mark">必須</span>
+			</span>
+		  </label>
+		</div>
+
+		<div class="form-actions">
+		  <button type="submit" class="form-submit">送信する</button>
+		</div>
+		<p id="formStatus" role="status"></p>{/*内容が変わったとき読み上げソフトに知らせる属性*/}
+	  </form>
+	</div>
+  </section>
+</BaseLayout>
+<script type="application/json" id="planNamesData" is:inline set:html={JSON.stringify(planNames)}></script>
+<script>
+  import flatpickr from "flatpickr";
+  import { Japanese } from "flatpickr/dist/l10n/ja.js";
+  import "flatpickr/dist/flatpickr.min.css";
+
+  const dateInput = document.querySelector<HTMLInputElement>("#date");
+  if (dateInput) {
+	flatpickr(dateInput, {
+	  locale: Japanese,
+	  minDate: "today",
+	  dateFormat: "Y-m-d",
+	  disable: [(date: Date) => date.getDay() === 2 || date.getDay() === 3], // 火・水を無効化
+	});
+  }
+</script>
+<script is:inline define:vars={{ thanksUrl }}>
+  // 送信処理を実装。HTML標準バリデーションを通った内容をJSONにまとめ、
+  // 段階2でデプロイした Cloudflare Worker（受け口）へ送る。
+  // JS無効時でも required / type="email" は機能する（フォールバック）。
+  const form = document.getElementById("contactForm");
+
+  // 送信結果の表示先（後述：HTMLに無ければ1行追加）と、送信ボタン
+  const statusEl = document.getElementById("formStatus");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.textContent : "";
+
+  // 段階2でデプロイした Worker のURL。自分の workers.dev のURLに置き換える
+  const ENDPOINT = "https://whitehouse-imari-contact-worker.matsufuji.workers.dev";  
+  const planNames = JSON.parse(document.getElementById("planNamesData")?.textContent || "{}");
+const rawPlanId = new URLSearchParams(location.search).get("plan_id") || "";
+	const planId = rawPlanId.replace(/\/+$/, ""); // 末尾のスラッシュを除去してIDとして使う
+	const planIdInput = document.getElementById("planId");
+	if (planIdInput) planIdInput.value = planId; // 送信値も正規化後のIDにする
+	const planName = planNames[planId] || "";
+	  const targetEl = document.getElementById("contactTarget");
+	  if (targetEl && planName) {
+		targetEl.textContent = "お問い合わせ対象：" + planName; // textContent=文字として入れる（HTML注入を防ぎ安全）
+		targetEl.hidden = false; // hidden を外して表示する
+	  }
+  
+	if (form) {
+	form.addEventListener("submit", async (event) => {
+	  // 既定の送信動作（ページ遷移・リロード）を止める
+	  event.preventDefault();
+
+	  // ブラウザ標準の入力チェック。未入力やメール形式エラーがあれば中断
+	  if (!form.checkValidity()) {
+		  form.reportValidity();
+		  return;
+		}
+	  
+		// ご希望日の必須チェック（readonlyのためHTML標準のrequiredが効かない＝JSで確認する）
+		const dateEl = document.getElementById("date");
+		if (dateEl && !dateEl.value) {
+		  if (statusEl) statusEl.textContent = "ご希望日を選択してください。";
+		  dateEl.focus(); // 入力欄にフォーカスしてカレンダーを開きやすくする
+		  return;
+		}
+
+	  // 二重送信を防ぐため、送信中はボタンを無効化して文言を変える
+	  if (submitBtn) {
+		submitBtn.disabled = true;
+		submitBtn.textContent = "送信中…";
+	  }
+	  if (statusEl) statusEl.textContent = "";
+
+	  // 入力値を、Worker が受け取る name と同じキーでJSONにまとめる
+	  const fd = new FormData(form);
+	  const payload = {
+		name: fd.get("name"),
+		kana: fd.get("kana"),
+		email: fd.get("email"),
+		tel: fd.get("tel"),
+		category: fd.get("category"),
+		message: fd.get("message"),
+		plan_id: fd.get("plan_id"), // hidden に入れたフェアIDを一緒に送る
+		date: fd.get("date"), // カレンダーで選んだ希望日（未選択なら空文字）
+		// チェックボックスは値ではなく checked（チェックの有無）を boolean で送る
+		agree: form.querySelector('[name="agree"]')?.checked === true,
+	  };
+
+	  try {
+		// Worker へ POST 送信
+		const res = await fetch(ENDPOINT, {
+		  method: "POST",
+		  headers: { "Content-Type": "application/json" }, // JSONで送ると伝える
+		  body: JSON.stringify(payload), // JSオブジェクト→JSON文字列に変換
+		});
+
+		// 返事を JSON として読む（壊れていても落ちないよう保険）
+		const data = await res.json().catch(() => ({}));
+
+		// HTTP成功 かつ Worker が ok:true を返したときだけ成功扱い
+		if (res.ok && data.ok) {
+		  window.location.href = thanksUrl; // 成功したらサンクスページへ遷移
+		  return; // 以降は不要なのでここで終了
+		} else {
+		  if (statusEl) statusEl.textContent = "送信に失敗しました。時間をおいて再度お試しください。";
+		  console.error("送信失敗", res.status, data); // 原因確認用ログ
+		}
+	  } catch (err) {
+		// 通信自体ができなかった場合（ネット不通・CORSブロックなど）
+		if (statusEl) statusEl.textContent = "通信エラーが発生しました。接続を確認して再度お試しください。";
+		console.error("通信エラー", err);
+	  } finally {
+		// 成功・失敗どちらでもボタンを元に戻す
+		if (submitBtn) {
+		  submitBtn.disabled = false;
+		  submitBtn.textContent = originalBtnText; // 元の文言（送信内容を確認する）に戻す
+		}
+	  }
+	});
+  }
+</script>
+<style>
+  .contact {
+	padding: 48px 16px 80px;
+  }
+  .contact__inner {
+	max-width: 720px;
+	margin: 0 auto;
+  }
+  .contact__lead {
+	margin-bottom: 32px;
+	line-height: 1.9;
+  }
+  .contact__required-note {
+	font-size: 0.875rem;
+	color: #666;
+  }
+  .contact-form {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+  }
+  .form-row {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+  }
+  .form-label {
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+  }
+  .required-mark {
+	display: inline-block;
+	font-size: 0.6875rem;
+	line-height: 1;
+	padding: 3px 6px;
+	border-radius: 3px;
+	background: #c0392b;
+	color: #fff;
+	font-weight: 600;
+  }
+  .form-control {
+	width: 100%;
+	padding: 12px 14px;
+	font-size: 1rem;
+	border: 1px solid #ccc;
+	border-radius: 6px;
+	background: #fff;
+  }
+  .form-control:focus {
+	outline: none;
+	border-color: #8a7a5c;
+	box-shadow: 0 0 0 3px rgba(138, 122, 92, 0.15);
+  }
+  .form-row--check {
+	margin-top: 8px;
+  }
+  .form-check {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	cursor: pointer;
+	line-height: 1.7;
+  }
+  .form-check input {
+	margin-top: 4px;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+  }
+  .contact__link {
+	color: #8a7a5c;
+	text-decoration: underline;
+  }
+  .contact__target {
+	  margin-bottom: 24px;
+	  padding: 12px 16px;
+	  background: #f6f2ea;
+	  border-left: 4px solid #8a7a5c;
+	  border-radius: 4px;
+	  font-weight: 600;
+	}
+  .form-actions {
+	margin-top: 16px;
+	text-align: center;
+  }
+  .form-submit {
+	display: inline-block;
+	min-width: 240px;
+	padding: 16px 32px;
+	font-size: 1rem;
+	font-weight: 600;
+	color: #fff;
+	background: #8a7a5c;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: opacity 0.2s ease;
+  }
+  .form-submit:hover {
+	opacity: 0.85;
+  }
+  @media (max-width: 600px) {
+	.form-submit {
+	  width: 100%;
+	}
+  }
+</style>

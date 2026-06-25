@@ -1,0 +1,134 @@
+---
+// =============================================================
+// ChapelSection.astro  （TOPページ / CHAPELセクション）
+// -------------------------------------------------------------
+// ・邸宅の3本柱のひとつ「ガラス張りチャペル」を紹介。
+// ・写真左 / テキスト右の2カラム（モバイルは縦積み）。
+// ・写真はHero用に最適化済みのWebPを <picture> で再利用。
+// ・末尾に詳細ページ /chapel/（後セッションで実装）への導線。
+// ・文言は仮。上司・クライアント確認後に差し替えてください。
+// =============================================================
+
+import { url } from '../../lib/url';
+
+// 画像パス。base（/test-whi）末尾スラッシュの有無に依存しないよう正規化する。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const heroDir = `${base}/images/hero/`;
+
+// ---- 本文（仮・編集可）----
+const overline = 'CHAPEL';
+const headline = ['光と緑に抱かれる<br>クリスタルチャペル'];
+const bodyParagraphs = [
+  '全面ガラス張りの空間に、自然光と中庭の緑が差し込みます。',
+  'ヴァージンロードに反射する光、ゲストの背後に広がる景色——飾り立てない美しさで、誓いの瞬間を包みます。',
+];
+---
+
+<section class="chapel" aria-labelledby="chapel-heading">
+  <div class="chapel__inner">
+    <div class="chapel__media">
+      <picture>
+        <source
+          type="image/webp"
+          srcset={`${heroDir}hero-1-chapel-1280.webp 1280w, ${heroDir}hero-1-chapel.webp 2000w`}
+          sizes="(min-width: 768px) 50vw, 100vw"
+        />
+        <img
+          src={`${heroDir}hero-1-chapel.jpg`}
+          alt="全面ガラス張りのクリスタルチャペル"
+          width="2000"
+          height="1333"
+          loading="lazy"
+          decoding="async"
+        />
+      </picture>
+    </div>
+    <div class="chapel__text">
+      <p class="chapel__overline">{overline}</p>
+      <h2 id="chapel-heading" class="chapel__headline">{headline.map((p) => <p set:html={p} />)}</h2>
+      <div class="chapel__body">
+        {/* <br /> 等のHTMLを文字列内に書けるよう set:html。文言は固定値なので安全。 */}
+        {bodyParagraphs.map((p) => <p set:html={p} />)}
+      </div>
+      <p class="chapel__more">
+        <a href={url('/chapel/')}>チャペルを見る</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .chapel {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .chapel__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+  }
+  .chapel__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .chapel__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .chapel__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 32px;
+  }
+  .chapel__body {
+    font-family: var(--font-jp-sans);
+    font-weight: var(--weight-regular);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+  .chapel__body p + p {
+    margin-top: 1.4em;
+  }
+  .chapel__more {
+    margin-top: 40px;
+  }
+  .chapel__more a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .chapel__more a::after {
+    content: '  →';
+    color: var(--green);
+  }
+  .chapel__more a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .chapel__more a:hover::after {
+    color: var(--charcoal);
+  }
+
+  @media (max-width: 768px) {
+    .chapel__inner {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+  }
+</style>

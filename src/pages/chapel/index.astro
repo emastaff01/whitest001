@@ -1,0 +1,237 @@
+---
+// =============================================================
+// src/pages/chapel/index.astro （チャペル紹介ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/chapel/
+// ・固定の1枚ページ。構成：PageHeader＋ヒーロー画像＋リード＋特徴ブロック×3＋CtaSection。
+// ・画像は public/images/chapel/ に配置（jpg＋webpのペア）。src は必ず .jpg 終わりで渡す。
+// ・banquet / cuisine も、このファイルをコピーして文言・画像名だけ変える前提。
+// =============================================================
+import fs from 'node:fs';   // フォルダ内のファイル一覧を読むための標準モジュール
+import path from 'node:path'; // OSに依存しない安全なパス連結のため
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import FairSection from '../../components/home/FairSection.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import '../../styles/facility.css';
+
+// 画像パス用の小さなヘルパー（このサイトは /test-whi/ 配下で動くため base を付ける）
+// ※PlanCard は共通の toAssetPath/toWebpPath を使用。import 元の確認が要るため、
+//   ここでは url.ts と同じ import.meta.env.BASE_URL を使って安全にパスを組み立てる。
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // → '/test-whi'（末尾スラッシュなし）
+const asset = (p: string) => `${BASE}/${p.replace(/^\/+/, '')}`; // base とパスを必ずスラッシュ1個でつなぐ
+const webp = (p: string) => asset(p).replace(/\.jpg$/i, '.webp'); // 末尾 .jpg → .webp（変更なし）
+// （asset / webp の定義の直後に追加）
+// public/images/chapel/ の中の .jpg を全部ギャラリーに使う。
+// ・ビルド時にNodeがフォルダを読むため、写真を足してビルドし直すと自動で増える。
+// ・.webp は <picture> の source 用なので一覧からは除外（jpg だけ拾う）。
+// ・フォルダが無くてもエラーで止まらないよう existsSync で保護（banquet/cuisuse 流用時も安全）。
+const chapelDir = path.join(process.cwd(), 'public', 'images', 'chapel');
+const galleryImages = fs.existsSync(chapelDir)
+  ? fs
+      .readdirSync(chapelDir)
+      .filter((f) => /\.jpg$/i.test(f)) // 拡張子 .jpg のみ
+      .sort() // ファイル名順で並びを安定させる（順番を変えたいときは名前の先頭に 01_ などを付ける）
+      .map((f) => `/images/chapel/${f}`) // サイト内パス（base は asset/webp が後付け）
+  : [];
+---
+<BaseLayout
+  title="チャペル｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里のチャペル。開放的なガラスウォールから光が差し込む、純白のセレモニー空間。スクリーンを使った映像演出も人気です。"
+>
+  <PageHeader
+    overline="CHAPEL"
+    title="チャペル"
+    description="光に満ちた、純白のセレモニー空間。"
+  />
+
+  <section class="facility">
+    <div class="facility__inner">
+      {/* メインビジュアル（ヒーロー）。最初に見える画像なので loading は eager */}
+      <div class="facility__hero">
+        <picture>
+          <source type="image/webp" srcset={webp('/images/chapel/chapelTOP.jpg')} />
+          <img
+            src={asset('/images/chapel/chapelTOP.jpg')}
+            alt="ホワイトハウス伊万里のチャペル"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
+      </div>
+
+      {/* リード文 */}
+      <p class="facility__lead">
+        混じりけのない純粋な真白な想いを誓うチャペルには、開放的なガラスウォールから、ゆらぎのある光が差し込み、ふたりを至福の時へ。
+      </p>
+
+      {/* 特徴ブロック1：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/chapel/chapel-photo-01.jpg')} />
+            <img
+              src={asset('/images/chapel/chapel-photo-01.jpg')}
+              alt="ガラスウォールから光が差し込むクリスタルチャペル"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">CRYSTAL CHAPEL</h2>
+          <p class="facility__block-body">混じりけのない純粋な真白な想いを誓うチャペルには、開放的なガラスウォールから、ゆらぎのある光が差し込み、ふたりを至福の時へ・・・。癒しの水盤と柔らかな光に包まれた空間には、ふたりのハッピーが広がって、清からで美しいだけではなく、おもてなしの心、笑顔、木々のざわめき、すべてが優しく心地よいハーモニーとなって奏でられます。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック2：--reverse で画像を右に配置 */}
+      <div class="facility__block facility__block--reverse">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/chapel/chapel-photo-02.jpg')} />
+            <img
+              src={asset('/images/chapel/chapel-photo-02.jpg')}
+              alt="スクリーンを使った映像演出の様子"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">スクリーンを使った感動的な映像演出も評判</h2>
+          <p class="facility__block-body">明るく華やかな雰囲気はもちろんのこと、カーテンを閉めて暗くなった館内で、照明を使って幻想的な空間を演出することもおすすめです。スクリーンを使った映像演出も楽しめます。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック3：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/chapel/chapel-photo-03.jpg')} />
+            <img
+              src={asset('/images/chapel/chapel-photo-03.jpg')}
+              alt="ゲストとの一体感が感じられるチャペルの内観"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">ゲストとの一体感が生まれる空間</h2>
+          <p class="facility__block-body">チャペル内の広さも程よく、ゲストとの一体感を味わえるのも特徴。みんなの心が一つに重なり合う、かけがえのない時間となることでしょう。</p>
+        </div>
+      </div>
+      {/* ギャラリー（フォルダ内の全jpgを1:1サムネで表示。クリックで全画面） */}
+      {galleryImages.length > 0 && (
+        <div class="facility__gallery">
+          {galleryImages.map((src, i) => (
+            <button type="button" class="gallery-thumb" data-index={i} aria-label={`チャペルの写真${i + 1}を拡大表示`}>
+              <picture>
+                <source type="image/webp" srcset={webp(src)} />
+                <img src={asset(src)} alt="" loading="lazy" decoding="async" />
+              </picture>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+{/* 全画面ギャラリー（ライトボックス）。初期は hidden で非表示。JSで開閉する */}
+  <div class="lightbox" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="ギャラリー拡大表示">
+    <button type="button" class="lightbox__close" aria-label="閉じる">×</button>
+    <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="前の画像">‹</button>
+    <div class="lightbox__stage">
+      <img class="lightbox__img" src="" alt="" />
+    </div>
+    <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="次の画像">›</button>
+    <p class="lightbox__counter"><span class="lightbox__current">1</span> / <span class="lightbox__total">1</span></p>
+  </div>
+  <FairSection compact />
+  <CtaSection />
+<script>
+    // ギャラリーのライトボックス：拡大・前後送り・スワイプ・キー操作・閉じる。
+    // ・画像URLは各サムネイルの <img src> から読む。型を明示し astro check を通す。
+    // ・show/open/close は const の矢印関数にする（function だと巻き上げで型の絞り込みが効かないため）。
+    const gallery = document.querySelector<HTMLElement>('.facility__gallery');
+    const lightbox = document.querySelector<HTMLElement>('.lightbox');
+    const lbImg = lightbox?.querySelector<HTMLImageElement>('.lightbox__img') ?? null;
+    const current = lightbox?.querySelector<HTMLElement>('.lightbox__current') ?? null;
+    const total = lightbox?.querySelector<HTMLElement>('.lightbox__total') ?? null;
+    const btnPrev = lightbox?.querySelector<HTMLElement>('.lightbox__nav--prev') ?? null;
+    const btnNext = lightbox?.querySelector<HTMLElement>('.lightbox__nav--next') ?? null;
+    const btnClose = lightbox?.querySelector<HTMLElement>('.lightbox__close') ?? null;
+  
+    // 必要な要素が全部そろったときだけ動かす（以降は null でないことが確定）
+    if (gallery && lightbox && lbImg && current && total && btnPrev && btnNext && btnClose) {
+      const thumbs = Array.from(gallery.querySelectorAll('.gallery-thumb'));
+      const sources = thumbs.map(
+        (btn) => btn.querySelector<HTMLImageElement>('img')?.getAttribute('src') ?? ''
+      );
+  
+      let index = 0; // いま表示している画像の番号（0始まり）
+      let lastFocused: HTMLElement | null = null; // 閉じたときフォーカスを戻す先
+  
+      total.textContent = String(sources.length);
+  
+      // 指定番号の画像を表示
+      const show = (i: number) => {
+        // 端を超えたら反対側へ回す（最後→最初、最初→最後）
+        index = (i + sources.length) % sources.length;
+        lbImg.src = sources[index];
+        lbImg.alt = 'チャペルの写真 ' + (index + 1);
+        current.textContent = String(index + 1);
+      };
+  
+      // 開く
+      const open = (i: number) => {
+        lastFocused = document.activeElement as HTMLElement | null; // 押したサムネイルを覚える
+        show(i);
+        lightbox.hidden = false;
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden'; // 背面のスクロールを止める
+        btnClose.focus();
+      };
+  
+      // 閉じる
+      const close = () => {
+        lightbox.hidden = true;
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = ''; // スクロールを元に戻す
+        if (lastFocused) lastFocused.focus(); // 元のサムネイルへ戻す
+      };
+  
+      // サムネイルのクリックで開く
+      thumbs.forEach((btn, i) => btn.addEventListener('click', () => open(i)));
+  
+      // 前後送り・閉じる
+      btnPrev.addEventListener('click', () => show(index - 1));
+      btnNext.addEventListener('click', () => show(index + 1));
+      btnClose.addEventListener('click', close);
+  
+      // 背景（画像の外側）クリックで閉じる
+      lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) close();
+      });
+  
+      // キーボード操作（開いているときだけ）：Escで閉じる、←→で前後
+      document.addEventListener('keydown', (e) => {
+        if (lightbox.hidden) return;
+        if (e.key === 'Escape') close();
+        if (e.key === 'ArrowLeft') show(index - 1);
+        if (e.key === 'ArrowRight') show(index + 1);
+      });
+  
+      // スワイプ操作（スマホ）：横に40px以上動いたら前後送り
+      let startX = 0;
+      lightbox.addEventListener('touchstart', (e) => {
+        startX = e.changedTouches[0].clientX;
+      }, { passive: true });
+      lightbox.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        if (Math.abs(dx) > 40) {
+          show(dx < 0 ? index + 1 : index - 1); // 左へスワイプ＝次、右へ＝前
+        }
+      }, { passive: true });
+    }
+  </script>
+</BaseLayout>

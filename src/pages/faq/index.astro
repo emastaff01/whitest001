@@ -1,0 +1,160 @@
+---
+// =============================================================
+// src/pages/faq/index.astro
+// よくある質問（FAQ）の一覧ページ。
+// 方針：1問ごとの詳細ページは作らず、このページに全件まとめる。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getFaqs } from '../../lib/getFaqs';
+
+// 公開中のFAQを sortOrder 順で取得（公開判定・並び替えは getFaqs に集約済み）
+const faqs = getFaqs();
+---
+
+<BaseLayout
+  title="よくある質問｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里によくお寄せいただくご質問と回答をまとめました。"
+>
+  <PageHeader
+    overline="FAQ"
+    title="よくある質問"
+    description="お打ち合わせ前に、よくいただくご質問をまとめました。"
+  />
+  
+  <section class="faq">
+    <div class="faq__inner">
+      <div class="faq__list">
+        <!-- faqs.map(...) の中身は FaqSection のまま変更なし -->
+        {faqs.map((faq) => (
+          <details class="faq-item">
+            <summary class="faq-item__q">
+              <span class="faq-item__mark" aria-hidden="true">Q</span>
+              <span class="faq-item__question">{faq.question}</span>
+              <span class="faq-item__icon" aria-hidden="true" />
+            </summary>
+            <div class="faq-item__a">
+              <span class="faq-item__mark faq-item__mark--a" aria-hidden="true">A</span>
+              <p class="faq-item__answer" set:html={faq.answer} />
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .faq {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .faq__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+
+  .faq__list {
+    border-top: 0.5px solid var(--hairline-dark);
+  }
+
+  .faq-item {
+    border-bottom: 0.5px solid var(--hairline-dark);
+  }
+  .faq-item__q {
+    display: grid;
+    grid-template-columns: 32px 1fr 24px;
+    gap: 16px;
+    align-items: start;
+    padding: 22px 4px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--charcoal);
+    transition: color 0.2s ease;
+  }
+  .faq-item__q::-webkit-details-marker {
+    display: none;
+  }
+  .faq-item__q:hover {
+    color: var(--green);
+  }
+
+  .faq-item__mark {
+    font-family: var(--font-en-display);
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--green);
+  }
+  .faq-item__question {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.92rem, 1.5vw, 1rem);
+    line-height: 1.7;
+  }
+
+  .faq-item__icon {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    margin-top: 6px;
+    justify-self: end;
+  }
+  .faq-item__icon::before,
+  .faq-item__icon::after {
+    content: '';
+    position: absolute;
+    background-color: var(--dark-gray);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .faq-item__icon::before {
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+  .faq-item__icon::after {
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 100%;
+    transform: translateX(-50%);
+  }
+  .faq-item[open] .faq-item__icon::after {
+    transform: translateX(-50%) rotate(90deg);
+    opacity: 0;
+  }
+
+  .faq-item__a {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 16px;
+    padding: 0 4px 22px;
+  }
+  .faq-item__mark--a {
+    color: var(--gray);
+  }
+  .faq-item__answer {
+    font-family: var(--font-jp-sans);
+    font-size: 0.92rem;
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+
+  @media (max-width: 600px) {
+    .faq-item__q {
+      grid-template-columns: 26px 1fr 20px;
+      gap: 12px;
+      padding: 18px 2px;
+    }
+    .faq-item__a {
+      grid-template-columns: 26px 1fr;
+      gap: 12px;
+      padding: 0 2px 18px;
+    }
+  }
+</style>

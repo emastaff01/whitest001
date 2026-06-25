@@ -1,0 +1,61 @@
+---
+// =============================================================
+// PageHeader.astro  （下層ページ用の共通ヘッダー）
+// -------------------------------------------------------------
+// ・各ページ最上部に置く、控えめなページヘッダー。
+// ・英字ラベル（overline）＋ 明朝の見出し ＋ 任意の説明文。
+// ・余白多めの静謐なトーンで、ファーストビューほど主張しない。
+// ・Hero（ファーストビュー）はTOPだけのもの。下層は基本これを使う。
+// =============================================================
+
+interface Props {
+  overline?: string; // 英字（例: 'FAIR', 'PLAN'）
+  title: string; // 日本語見出し
+  description?: string; // 任意の補足
+}
+
+const { overline, title, description } = Astro.props;
+---
+
+<header class="page-header">
+  <div class="page-header__inner">
+    {overline && <p class="page-header__overline">{overline}</p>}
+    <h1 class="page-header__title">{title}</h1>
+    {description && <p class="page-header__description">{description}</p>}
+  </div>
+</header>
+
+<style>
+  .page-header {
+    background-color: var(--white);
+    padding-block: clamp(56px, 8vw, 96px);
+    text-align: center;
+  }
+  .page-header__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .page-header__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .page-header__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 20px;
+  }
+  .page-header__description {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.9rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+</style>

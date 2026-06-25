@@ -1,0 +1,153 @@
+---
+// =============================================================
+// BannerSlider.astro （TOPページ / Hero直下のバナースライダー）
+// -------------------------------------------------------------
+// ・旧 LeadIntro（リード文）を置き換えるバナー置き場。
+// ・Swiper（ライブラリ）で自動送り＋左右チラ見せ＋無限ループ。
+//   - 中央のバナーが主役。左右に隣のバナーを少し見切れさせる。
+//   - PC/TB：中央＋両隣で約3枚見え。SP：中央1枚＋両隣チラ見せ。
+// ・バナーは横長タイプ。データは src/data/banners.json（getBanners経由）。
+// ・リンク先は当面 '#'（後でクライアント確認のうえ差し替え）。
+//
+// 画像は public/images/banners/ に .jpg + .webp のペアで配置。
+//   src は .jpg を入れる（toWebpPath が末尾 .jpg→.webp に置換するため）。
+// =============================================================
+
+import { getBanners } from '../../lib/getBanners';
+
+const banners = getBanners();
+
+// 画像パス（base 付き安全連結。PlanCard と同じ作法）。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+---
+
+{/* Swiper は「.swiper > .swiper-wrapper > .swiper-slide」の入れ子が必須。
+    このクラス名を変えると動かないので固定。 */}
+<section class="banners" aria-label="お知らせバナー">
+  <div class="swiper banners__swiper">
+    <div class="swiper-wrapper">
+      {
+        banners.map((banner) => (
+          <div class="swiper-slide banners__slide">
+            <a class="banners__link" href={banner.href}>
+              <picture>
+                <source type="image/webp" srcset={toWebpPath(banner.image.src)} />
+                <img
+                  src={toAssetPath(banner.image.src)}
+                  alt={banner.image.alt}
+                  width="1200"
+                  height="400"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+            </a>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .banners {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+    overflow: hidden; /* チラ見せ時に横スクロールバーが出ないように */
+  }
+  .banners__swiper {
+    width: 100%;
+  }
+  .banners__slide {
+    height: auto;
+  }
+  .banners__link {
+    display: block;
+  }
+  .banners__slide img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 1; /* 横長バナー想定。実画像比率に合わせて調整可 */
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+  }
+  .banners__swiper.is-static .swiper-slide {
+    width: min(100%, 760px); /* SP・1枚: 中央に大きく1枚 */
+  }
+  @media (min-width: 768px) {
+    /* PCで2枚以上は横並び（最大3枚/行、余りは中央寄せで折返し） */
+    .banners__swiper.is-static:not([data-count="1"]) .swiper-slide {
+      width: min(31%, 360px);
+    }
+    /* 2枚だけのときは少し大きく見せる（上のルールより後＝こちらが優先） */
+    .banners__swiper.is-static[data-count="2"] .swiper-slide {
+      width: min(48%, 520px);
+    }
+  }
+</style>
+
+{/* import を使うので is:inline は付けない（Astroがバンドルする＝flatpickrと同じ作法） */}
+<script>
+  import Swiper from 'swiper';
+  import { Autoplay } from 'swiper/modules'; // 自動送り機能だけ読み込む（軽量化）
+  import 'swiper/css'; // Swiperの基本スタイル（必須）
+  
+  const el = document.querySelector<HTMLElement>('.banners__swiper');
+  if (el) {
+    // 公開中バナーの枚数（HTMLにあるスライド数から数える）
+    const count = el.querySelectorAll('.banners__slide').length;
+    // モーションOFF設定なら自動送りしない
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // 768px以上を「PC/TB」とみなす境界。matches=true ならPC/TB幅。
+    const mqDesktop = window.matchMedia('(min-width: 768px)');
+  
+    // Swiperのインスタンスを入れておく入れ物（未作成のときは null）
+    // ※ const のアロー関数＋型注釈で astro check に通す
+    let swiper: Swiper | null = null;
+  
+    //   PC/TB（約3枚表示=slidesPerView 3.2）= 5枚以上
+    //   SP（約1枚表示=slidesPerView 1.2）   = 3枚以上
+    //   これ未満は静的表示（中央に並べる）にして、loop警告と崩れた中央寄せを避ける。
+    const shouldSlide = (): boolean =>
+      mqDesktop.matches ? count >= 5 : count >= 3;
+  
+    // Swiperを作り直す関数。初回と、画面幅が境界をまたいだときに呼ぶ。
+    const build = (): void => {
+      // すでに作ってあれば一旦破棄（true,true＝Swiperが付けたstyle/classも掃除）
+      if (swiper) {
+        swiper.destroy(true, true);
+        swiper = null;
+      }
+      // スライド不要なら「静的表示」クラスを付けて終了（Swiperは作らない）
+      if (!shouldSlide()) {
+        el.classList.add('is-static');
+        return;
+      }
+      // スライドする場合：静的クラスを外してSwiperを作成
+      el.classList.remove('is-static');
+      swiper = new Swiper(el, {
+        modules: [Autoplay],
+        centeredSlides: true, // 中央を主役にし、左右の隣をチラ見せ
+        // PC/TBは約3枚＋端チラ見せ、SPは中央1枚＋両隣チラ見せ
+        slidesPerView: mqDesktop.matches ? 3.2 : 1.2,
+       spaceBetween: mqDesktop.matches ? 20 : 12,
+       loop: true, // 中央＋両側チラ見せには左右に隣が必要。loopは複製を作るので成立する
+       
+       autoplay: reduceMotion
+          ? false
+          : {
+              delay: 4000, // 1枚あたりの表示時間(ミリ秒)
+              disableOnInteraction: false, // 手で動かした後も自動送りを続ける
+              pauseOnMouseEnter: true, // マウスを乗せている間は停止
+            },
+      });
+    };
+  
+    build(); // 初回実行
+    // 画面幅がPC/SPの境界(768px)をまたいだら作り直す（判定が変わるため）
+    mqDesktop.addEventListener('change', build);
+  }
+</script>

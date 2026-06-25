@@ -1,0 +1,123 @@
+---
+// 右下に追従するフローティングナビ
+// 中身：(1) ブライダルフェアのバナー（常時表示） (2) ページ上部へ戻るボタン（スクロールで出現）
+import { url } from '../../lib/url';
+
+// base（サブディレクトリ '/test-whi'）を画像パスへ付ける準備。
+// この環境の BASE_URL は末尾スラッシュ無し（'/test-whi'）なので、
+// 末尾スラッシュ除去 → パス先頭スラッシュ除去 → スラッシュ1個で連結する。
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const asset = (p: string): string => `${BASE}/${p.replace(/^\/+/, '')}`;
+// .png を .webp に置き換える（<picture> の webp 用）
+const webp = (p: string): string => asset(p).replace(/\.png$/i, '.webp');
+
+// バナー画像（public/images/floating/ に png + webp のペアを配置）
+const bannerPng = '/images/floating/fair_banner.png';
+
+// バナーのリンク先。内部リンクは url() を通す（base 自動付与でリンク切れ防止）
+const fairUrl = url('/fair/');
+---
+
+<div class="floating">
+  <!-- ブライダルフェアのバナー（常時表示） -->
+  <a href={fairUrl} class="floating__banner" aria-label="ブライダルフェア実施中。詳しく見る">
+    <picture>
+      <source srcset={webp(bannerPng)} type="image/webp" />
+      <img src={asset(bannerPng)} alt="ブライダルフェア実施中！" loading="lazy" decoding="async" />
+    </picture>
+  </a>
+
+  <!-- ページ上部へ戻るボタン（スクロールすると出現） -->
+  <button type="button" class="floating__top" id="floatingTop" aria-label="ページの先頭へ戻る">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M18 15l-6-6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <span class="floating__top-label">TOP</span>
+  </button>
+</div>
+
+<style>
+.floating {
+  position: fixed;
+  right: 0px;
+  bottom: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.floating__banner {
+  display: block;
+  width: clamp(200px, 32vw, 300px);
+  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+.floating__banner:hover { transform: translateY(-2px); }
+.floating__banner img { width: 100%; height: auto; }
+.floating__top {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 80px;
+  height: 80px;
+  border: none;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--white);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
+}
+.floating__top.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.floating__top-label {
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  font-family: var(--font-en-label);
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating__top { transition: opacity 0.25s ease; transform: none; }
+  .floating__banner { transition: none; }
+}
+</style>
+
+<script>
+  // 「ページ上部へ戻る」ボタンの制御
+  // 型チェック(astro check)対策で querySelector に要素型を指定する。
+  const topBtn = document.querySelector<HTMLButtonElement>('#floatingTop');
+
+  // 必要な要素が取れたときだけ処理する（null ガード）。
+  // 関数は const のアロー関数で定義（function 宣言だと型の絞り込みが効かずエラーになりやすい）。
+  if (topBtn) {
+    // スクロール量で表示/非表示を切り替える
+    const toggle = (): void => {
+      // 300px より下までスクロールしたら表示
+      if (window.scrollY > 300) {
+        topBtn.classList.add('is-visible');
+      } else {
+        topBtn.classList.remove('is-visible');
+      }
+    };
+
+    // クリックで最上部へスムーズスクロール
+    topBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // スクロールのたびに判定（passive: true で描画をブロックしない＝軽い）
+    window.addEventListener('scroll', toggle, { passive: true });
+    // 初期表示でも一度判定（リロード位置が下の場合に備える）
+    toggle();
+  }
+</script>

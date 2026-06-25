@@ -1,0 +1,237 @@
+---
+// =============================================================
+// src/pages/banquet/index.astro （披露宴会場 紹介ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/banquet/
+// ・chapel/index.astro をコピーし、文言・画像フォルダ名だけ変更したもの。
+// ・構造・CSS・ライトボックスのロジックは chapel と完全に同一。
+// ・画像は public/images/banquet/ に配置（jpg＋webpのペア）。src は必ず .jpg 終わりで渡す。
+// =============================================================
+import fs from 'node:fs';   // フォルダ内のファイル一覧を読むための標準モジュール
+import path from 'node:path'; // OSに依存しない安全なパス連結のため
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import FairSection from '../../components/home/FairSection.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import '../../styles/facility.css';
+
+// 画像パス用の小さなヘルパー（このサイトは /test-whi/ 配下で動くため base を付ける）
+// ※PlanCard は共通の toAssetPath/toWebpPath を使用。import 元の確認が要るため、
+//   ここでは url.ts と同じ import.meta.env.BASE_URL を使って安全にパスを組み立てる。
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // → '/test-whi'（末尾スラッシュなし）
+const asset = (p: string) => `${BASE}/${p.replace(/^\/+/, '')}`; // base とパスを必ずスラッシュ1個でつなぐ
+const webp = (p: string) => asset(p).replace(/\.jpg$/i, '.webp'); // 末尾 .jpg → .webp（変更なし）
+// （asset / webp の定義の直後に追加）
+// public/images/banquet/ の中の .jpg を全部ギャラリーに使う。
+// ・ビルド時にNodeがフォルダを読むため、写真を足してビルドし直すと自動で増える。
+// ・.webp は <picture> の source 用なので一覧からは除外（jpg だけ拾う）。
+// ・フォルダが無くてもエラーで止まらないよう existsSync で保護。
+const banquetDir = path.join(process.cwd(), 'public', 'images', 'banquet');
+const galleryImages = fs.existsSync(banquetDir)
+  ? fs
+      .readdirSync(banquetDir)
+      .filter((f) => /\.jpg$/i.test(f)) // 拡張子 .jpg のみ
+      .sort() // ファイル名順で並びを安定させる（順番を変えたいときは名前の先頭に 01_ などを付ける）
+      .map((f) => `/images/banquet/${f}`) // サイト内パス（base は asset/webp が後付け）
+  : [];
+---
+<BaseLayout
+  title="披露宴会場｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里の披露宴会場。全面ガラス張りに水盤の光が煌めく、水と緑に包まれた貸切空間。ロビー・テラスもご紹介します。"
+>
+  <PageHeader
+    overline="BANQUET"
+    title="披露宴会場"
+    description="水と緑に包まれた、貸切の披露宴会場。"
+  />
+
+  <section class="facility">
+    <div class="facility__inner">
+      {/* メインビジュアル（ヒーロー）。最初に見える画像なので loading は eager */}
+      <div class="facility__hero">
+        <picture>
+          <source type="image/webp" srcset={webp('/images/banquet/banquetTOP.jpg')} />
+          <img
+            src={asset('/images/banquet/banquetTOP.jpg')}
+            alt="ホワイトハウス伊万里の披露宴会場"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
+      </div>
+
+      {/* リード文 */}
+      <p class="facility__lead">
+        全面ガラス張りの会場に、水盤の光がやわらかく揺らめく。水と緑に満ちた貸切空間で、ふたりとゲストの幸せが重なり合う、感動のひとときへ。
+      </p>
+
+      {/* 特徴ブロック1：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/banquet/banquet-photo-01.jpg')} />
+            <img
+              src={asset('/images/banquet/banquet-photo-01.jpg')}
+              alt="全面ガラス張りのメイン会場"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">WHITE HOUSE IMARI</h2>
+          <p class="facility__block-body">全面ガラス張りのメイン席は水盤の光が煌めき、会場すべてが水と緑豊かな空間に包まれます。専属シェフがオープンキッチンで調理する姿は躍動感溢れ、ゲストの方にも満足頂ける演出の一つです。壁一面に広がる映像は新郎新婦からゲストまで様々な演出に対応可能。幸せが集まる感動の貸切会場です。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック2：--reverse で画像を右に配置 */}
+      <div class="facility__block facility__block--reverse">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/banquet/banquet-photo-02.jpg')} />
+            <img
+              src={asset('/images/banquet/banquet-photo-02.jpg')}
+              alt="アンバーな光に包まれたロビー"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">LOBBY</h2>
+          <p class="facility__block-body">アンバーな光に包まれたモダンスタイリッシュなロビー。バーカウンターを常備した寛ぎの空間とウェルカムスイーツでウェディングをおもてなしに。最高のセレモニーへのプロローグはこの場所から始まります。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック3：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/banquet/banquet-photo-03.jpg')} />
+            <img
+              src={asset('/images/banquet/banquet-photo-03.jpg')}
+              alt="噴水や水盤のあるテラス"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">TERRACE</h2>
+          <p class="facility__block-body">噴水や水盤が爽やかさを演出するリゾート空間。開放的な空間でゲストの皆様にリラックスしていただきます。駅近くの立地でありながら一度式場内に足を踏み入れるとそこはまさに別空間。</p>
+        </div>
+      </div>
+      {/* ギャラリー（フォルダ内の全jpgを1:1サムネで表示。クリックで全画面） */}
+      {galleryImages.length > 0 && (
+        <div class="facility__gallery">
+          {galleryImages.map((src, i) => (
+            <button type="button" class="gallery-thumb" data-index={i} aria-label={`披露宴会場の写真${i + 1}を拡大表示`}>
+              <picture>
+                <source type="image/webp" srcset={webp(src)} />
+                <img src={asset(src)} alt="" loading="lazy" decoding="async" />
+              </picture>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+{/* 全画面ギャラリー（ライトボックス）。初期は hidden で非表示。JSで開閉する */}
+  <div class="lightbox" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="ギャラリー拡大表示">
+    <button type="button" class="lightbox__close" aria-label="閉じる">×</button>
+    <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="前の画像">‹</button>
+    <div class="lightbox__stage">
+      <img class="lightbox__img" src="" alt="" />
+    </div>
+    <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="次の画像">›</button>
+    <p class="lightbox__counter"><span class="lightbox__current">1</span> / <span class="lightbox__total">1</span></p>
+  </div>
+ <FairSection compact />
+  <CtaSection />
+<script>
+    // ギャラリーのライトボックス：拡大・前後送り・スワイプ・キー操作・閉じる。
+    // ・画像URLは各サムネイルの <img src> から読む。型を明示し astro check を通す。
+    // ・show/open/close は const の矢印関数にする（function だと巻き上げで型の絞り込みが効かないため）。
+    const gallery = document.querySelector<HTMLElement>('.facility__gallery');
+    const lightbox = document.querySelector<HTMLElement>('.lightbox');
+    const lbImg = lightbox?.querySelector<HTMLImageElement>('.lightbox__img') ?? null;
+    const current = lightbox?.querySelector<HTMLElement>('.lightbox__current') ?? null;
+    const total = lightbox?.querySelector<HTMLElement>('.lightbox__total') ?? null;
+    const btnPrev = lightbox?.querySelector<HTMLElement>('.lightbox__nav--prev') ?? null;
+    const btnNext = lightbox?.querySelector<HTMLElement>('.lightbox__nav--next') ?? null;
+    const btnClose = lightbox?.querySelector<HTMLElement>('.lightbox__close') ?? null;
+  
+    // 必要な要素が全部そろったときだけ動かす（以降は null でないことが確定）
+    if (gallery && lightbox && lbImg && current && total && btnPrev && btnNext && btnClose) {
+      const thumbs = Array.from(gallery.querySelectorAll('.gallery-thumb'));
+      const sources = thumbs.map(
+        (btn) => btn.querySelector<HTMLImageElement>('img')?.getAttribute('src') ?? ''
+      );
+  
+      let index = 0; // いま表示している画像の番号（0始まり）
+      let lastFocused: HTMLElement | null = null; // 閉じたときフォーカスを戻す先
+  
+      total.textContent = String(sources.length);
+  
+      // 指定番号の画像を表示
+      const show = (i: number) => {
+        // 端を超えたら反対側へ回す（最後→最初、最初→最後）
+        index = (i + sources.length) % sources.length;
+        lbImg.src = sources[index];
+        lbImg.alt = '披露宴会場の写真 ' + (index + 1);
+        current.textContent = String(index + 1);
+      };
+  
+      // 開く
+      const open = (i: number) => {
+        lastFocused = document.activeElement as HTMLElement | null; // 押したサムネイルを覚える
+        show(i);
+        lightbox.hidden = false;
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden'; // 背面のスクロールを止める
+        btnClose.focus();
+      };
+  
+      // 閉じる
+      const close = () => {
+        lightbox.hidden = true;
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = ''; // スクロールを元に戻す
+        if (lastFocused) lastFocused.focus(); // 元のサムネイルへ戻す
+      };
+  
+      // サムネイルのクリックで開く
+      thumbs.forEach((btn, i) => btn.addEventListener('click', () => open(i)));
+  
+      // 前後送り・閉じる
+      btnPrev.addEventListener('click', () => show(index - 1));
+      btnNext.addEventListener('click', () => show(index + 1));
+      btnClose.addEventListener('click', close);
+  
+      // 背景（画像の外側）クリックで閉じる
+      lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) close();
+      });
+  
+      // キーボード操作（開いているときだけ）：Escで閉じる、←→で前後
+      document.addEventListener('keydown', (e) => {
+        if (lightbox.hidden) return;
+        if (e.key === 'Escape') close();
+        if (e.key === 'ArrowLeft') show(index - 1);
+        if (e.key === 'ArrowRight') show(index + 1);
+      });
+  
+      // スワイプ操作（スマホ）：横に40px以上動いたら前後送り
+      let startX = 0;
+      lightbox.addEventListener('touchstart', (e) => {
+        startX = e.changedTouches[0].clientX;
+      }, { passive: true });
+      lightbox.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        if (Math.abs(dx) > 40) {
+          show(dx < 0 ? index + 1 : index - 1); // 左へスワイプ＝次、右へ＝前
+        }
+      }, { passive: true });
+    }
+  </script>
+</BaseLayout>

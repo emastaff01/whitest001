@@ -1,0 +1,48 @@
+[
+  {
+    "id": "private-full",
+    "title": "1棟貸切ウェディング プラン(今なら豪華特典付き)",
+    "description": "邸宅・チャペル・ガーデンをおふたりとゲストだけで完全貸切。佐賀県初の1棟1組スタイルを存分に。",
+    "thumbnail": {
+      "src": "/images/plans/sample-plan-01.jpg",
+      "alt": "1棟貸切の邸宅外観"
+    },
+    "priceFrom": 2640000,
+    "priceTo": 8999997,
+    "guestCountBase": 100,
+    "includeIds": [
+      "pi-ceremony",
+      "pi-reception",
+      "pi-private",
+      "pi-coordinate"
+    ],
+    "tagIds": [
+      "pt-private"
+    ],
+    "isPublished": true,
+    "sortOrder": 1
+  },
+  {
+    "id": "standard",
+    "title": "スタンダード ウェディング プラン",
+    "description": "基本をおさえたバランス型プラン。ゲスト1人あたり約265,400円。",
+    "thumbnail": {
+      "src": "/images/plans/sample-plan-03.jpg",
+      "alt": "披露宴のテーブルコーディネート"
+    },
+    "priceFrom": 10440000,
+    "guestCountBase": 100,
+    "includeIds": [
+      "pi-ceremony",
+      "pi-reception",
+      "pi-coordinate"
+    ],
+    "tagIds": [
+      "pt-private",
+      "pt-small"
+    ],
+    "isPublished": true,
+    "sortOrder": 3,
+    "priceTo": 999999999
+  }
+]

@@ -1,0 +1,155 @@
+---
+// =============================================================
+// PlanCard.astro  （プランカード単体・複数箇所で使い回す）
+// -------------------------------------------------------------
+// ・TOPページの PlanSection と /plan/ 一覧ページで同じ見た目を使うため、
+//   カード部分をこのコンポーネントに切り出した（FairCard と同じ考え方）。
+// ・カード全体が <a> でクリック可能（/plan/[id]/ へ）。
+// =============================================================
+
+import type { Plan } from '../../types';
+import { url } from '../../lib/url';
+import { getTaxonomyMap } from '../../lib/getTaxonomies';
+// このカードが受け取るデータ（1件分のプラン）
+interface Props {
+  plan: Plan;
+}
+const { plan } = Astro.props;
+
+// 画像パス（base 付き安全連結）
+// plans.json の thumbnail.src は "/images/plans/xxx.jpg" のように
+// 先頭スラッシュ付きで入っているので、base 末尾スラッシュを除いて連結する。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 価格を「2,640,000」のように3桁区切りに整形（日本式）
+const priceFromText = plan.priceFrom.toLocaleString('ja-JP');
+
+// 含まれるもの：includeIds（id参照）を表示用ラベルへ変換。未知 id は除外（防御）。
+const includeMap = getTaxonomyMap('plan-includes');
+const includeLabels = (plan.includeIds ?? [])
+  .map((id) => includeMap.get(id)?.label)
+  .filter((label): label is string => Boolean(label));
+---
+
+<article class="plan-card">
+  <a class="plan-card__link" href={url(`/plan/${plan.id}/`)}>
+    <div class="plan-card__media">
+      <picture>
+        <source type="image/webp" srcset={toWebpPath(plan.thumbnail.src)} />
+        <img
+          src={toAssetPath(plan.thumbnail.src)}
+          alt={plan.thumbnail.alt}
+          width="1200"
+          height="800"
+          loading="lazy"
+          decoding="async"
+        />
+      </picture>
+    </div>
+    <div class="plan-card__text">
+      <h3 class="plan-card__title">{plan.title}</h3>
+      <p class="plan-card__price">
+        <span class="plan-card__price-num">{priceFromText}</span>
+        <span class="plan-card__price-suffix">
+          円〜
+          {plan.guestCountBase && `（${plan.guestCountBase}名様）`}
+        </span>
+      </p>
+      <p class="plan-card__brief">{plan.description}</p>
+      {/* 含まれるもの：includeIds をラベル化して表示（フェアの来館特典と同じ見せ方） */}
+      {
+        includeLabels.length > 0 && (
+          <div class="plan-card__includes">
+            <p class="plan-card__includes-label">含まれるもの</p>
+            <p class="plan-card__includes-list">{includeLabels.join(' ／ ')}</p>
+          </div>
+        )
+      }
+      <span class="plan-card__more">詳細を見る  →</span>
+    </div>
+  </a>
+</article>
+
+<style>
+  .plan-card__link {
+    display: block;
+    color: inherit;
+    transition: opacity 0.2s ease;
+  }
+  .plan-card__link:hover {
+    opacity: 0.82;
+  }
+  .plan-card__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .plan-card__text {
+    padding-top: 22px;
+  }
+  .plan-card__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.05rem, 1.8vw, 1.2rem);
+    line-height: 1.6;
+    color: var(--charcoal);
+    margin-bottom: 16px;
+  }
+  .plan-card__price {
+    margin-bottom: 14px;
+    color: var(--charcoal);
+    line-height: 1;
+  }
+  .plan-card__price-num {
+    font-family: var(--font-en-display);
+    font-weight: var(--weight-regular);
+    font-size: clamp(1.6rem, 3vw, 2rem);
+    letter-spacing: 0.02em;
+  }
+  .plan-card__price-suffix {
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--dark-gray);
+    margin-left: 4px;
+  }
+  .plan-card__brief {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+    margin-bottom: 18px;
+  }
+  .plan-card__includes {
+    margin-bottom: 20px;
+  }
+  .plan-card__includes-label {
+    display: inline-block;
+    font-family: var(--font-jp-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--charcoal);
+    border: 1px solid var(--charcoal);
+    padding: 3px 10px;
+    margin-bottom: 10px;
+  }
+  .plan-card__includes-list {
+    font-family: var(--font-jp-sans);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--dark-gray);
+  }
+  .plan-card__more {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .plan-card__link:hover .plan-card__more {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+</style>

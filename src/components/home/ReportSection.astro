@@ -1,0 +1,123 @@
+---
+// =============================================================
+// ReportSection.astro  （TOPページ / REPORTセクション）
+// -------------------------------------------------------------
+// ・getReports() で卒花レポート（実際の結婚式）を取得しカード表示。
+// ・各カードからレポート詳細（/report/[id]）へ。
+// ・現データは2件だが、grid は 3 列まで自然に並べられるよう設計。
+// ・将来 Firestore へ差し替える場合は getReports() の中身だけ変更すればOK。
+// =============================================================
+
+import { getReports } from '../../lib/getReports';
+import { url } from '../../lib/url';
+// カードを共通部品に切り出したので読み込む
+import ReportCard from '../../components/report/ReportCard.astro';
+
+// TOPでは最新3件程度に絞って表示する（多すぎると重い）
+const reports = getReports().slice(0, 3);
+
+// 画像・日付の整形は ReportCard 側へ移動したため、ここでは不要
+
+// ---- セクション見出し（仮・編集可）----
+const overline = 'REPORT';
+const headline = 'おふたりの一日をお届け';
+const intro = ['ホワイトハウス伊万里で叶ったウェディングの実例を<br class="sp">ご紹介します。'];
+---
+
+<section class="report" aria-labelledby="report-heading">
+  <div class="report__inner">
+    <header class="report__header">
+      <p class="report__overline">{overline}</p>
+      <h2 id="report-heading" class="report__headline">{headline}</h2>
+      <div class="report__intro">{intro.map((p) => <p set:html={p} />)}</div>
+    </header>
+
+    <div class="report__grid">
+      {reports.map((report) => <ReportCard report={report} />)}
+    </div>
+
+    <p class="report__more">
+      <a href={url('/report/')}>レポート一覧へ</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .report {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .report__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .report__header {
+    text-align: center;
+    margin-bottom: clamp(48px, 6vw, 72px);
+  }
+  .report__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .report__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 20px;
+  }
+  .report__intro {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.88rem, 1.5vw, 0.95rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+
+  .report__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: clamp(28px, 3vw, 40px);
+  }
+
+  .report__more {
+    margin-top: clamp(48px, 6vw, 72px);
+    text-align: center;
+  }
+  .report__more a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .report__more a::after {
+    content: '  →';
+    color: var(--green);
+  }
+  .report__more a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .report__more a:hover::after {
+    color: var(--charcoal);
+  }
+
+  @media (max-width: 900px) {
+    .report__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .report__grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+</style>

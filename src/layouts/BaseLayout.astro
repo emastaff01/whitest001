@@ -1,0 +1,199 @@
+---
+// =============================================================
+// BaseLayout.astro （全ページ共通の「土台」）
+// -------------------------------------------------------------
+// すべてのページがこのレイアウトを使うことで、
+// メタタグ・フォント・構造化データなどを1か所で管理できます。
+// 修正が必要な時もこのファイルだけ直せば全ページに反映されます。
+// =============================================================
+
+import { getSiteSettings } from '../lib/getSiteSettings';
+import Header from '../components/common/Header.astro';
+import Footer from '../components/common/Footer.astro';
+import '../styles/global.css';
+
+// 各ページから渡せる項目（プロパティ）を定義
+interface Props {
+  title: string; // ページタイトル（<title>とOGPに使用）
+  description?: string; // メタディスクリプション
+  ogImage?: string; // OGP画像のパス（任意）
+  showChrome?: boolean; // ヘッダー・フッターを表示するか（管理画面などで false にする）
+}
+
+const {
+  title,
+  description = '佐賀県伊万里市の結婚式場「ホワイトハウス伊万里」。全面ガラス張りチャペルと水と緑に囲まれた邸宅で、1棟1組完全貸切のプライベートウェディング。2026年6月リブランドOPEN。伊万里駅徒歩10分。',
+  ogImage = '/images/og-image.jpg',
+  showChrome = true,
+} = Astro.props;
+
+const settings = getSiteSettings();
+
+// サイトの公開URL（.envのPUBLIC_SITE_URLを優先。無ければ既定値）
+// origin（ホスト）だけを正にする。
+const SITE_URL =
+  import.meta.env.PUBLIC_SITE_URL ??
+  'https://ema-run-665477084949.asia-northeast1.run.app';
+
+// base（/test-whi）を考慮した絶対URLを作るヘルパー
+// import.meta.env.BASE_URL には astro.config.mjs の base が入る
+const base = import.meta.env.BASE_URL; // 例: '/test-whi/'（本番は '/'）
+const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
+// サイトのトップ（式場の代表URL）。EventVenue.url に使う。
+// base を SITE_URL に結合（テスト→ https://.../test-whi/、本番→ https://whitehouse-imari.net/）
+const homeURL = new URL(base, SITE_URL).href;
+const ogImageURL = new URL(`${base}${ogImage}`.replace(/\/{2,}/g, '/'), SITE_URL).href;
+
+// 式場ロゴの絶対URL。site-settings.json に logo があれば作る（無ければ undefined → JSON出力時に自動で省かれる）。
+// 作り方は ogImageURL と同じ（base を付け、二重スラッシュを1つにまとめ、SITE_URL と結合）。
+const logoURL = settings.logo
+  ? new URL(`${base}${settings.logo}`.replace(/\/{2,}/g, '/'), SITE_URL).href
+  : undefined;
+
+// GA4測定ID（テスト段階は空＝読み込まない。本番化フェーズで.envに設定）
+const GA4_ID = import.meta.env.PUBLIC_GA4_ID ?? '';
+
+// LocalBusiness構造化データ（MEO対策）。設計資料セクション6-2に準拠。
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'EventVenue',
+  name: settings.nap.name,
+  image: ogImageURL,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: '新天町520-6',
+    addressLocality: '伊万里市',
+    addressRegion: '佐賀県',
+    postalCode: settings.nap.postalCode,
+    addressCountry: 'JP',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: '33.275',
+    longitude: '129.880',
+  },
+  telephone: '+81-955-22-2021',
+  url: homeURL, // 直書きをやめ、SITE_URL から組み立てた代表URLに統一
+  logo: logoURL, // 式場ロゴ。undefined の時は JSON.stringify が自動で省くので安全
+    openingHours: ['Mo-Su 10:00-20:00'],
+  };
+  // このページがトップページかどうかの判定。
+  // base（例:'/test-whi/'）を除いた残りが空＝トップ、という考え方。
+  // 末尾スラッシュの有無で判定がぶれないよう、両方そろえてから比較する。
+  const normalizePath = (p: string) => p.replace(/\/+$/, '') || '/';
+  const isHome = normalizePath(Astro.url.pathname) === normalizePath(base);
+  
+  // 組織（Organization）構造化データ。
+  // EventVenue は「場所」なので Google の組織ロゴ機能の対象外。
+  // 別途 Organization を出し、ロゴをブランドのロゴとして認識させる狙い。
+  // url は「このブロックはトップでだけ出力する」ため、現在ページの絶対URL＝canonicalURL をそのまま使える。
+  const organizationData: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: settings.siteName, // ブランド名（ホワイトハウス伊万里）
+    url: canonicalURL,       // トップページの絶対URL（このブロックはトップ限定なので canonicalURL と一致する）
+  };
+  // ロゴがある時だけ logo を足す（無い時は付けない）。ImageObject 形式が Google 推奨。
+  if (logoURL) {
+    organizationData.logo = { '@type': 'ImageObject', url: logoURL };
+  }
+  ---
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    {/* テストサイト段階：検索エンジンにインデックスさせない。本番化時に削除する */}
+    <meta name="robots" content="noindex, nofollow" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta
+      name="keywords"
+      content="ホワイトハウス伊万里,伊万里 結婚式場,佐賀 結婚式,1棟貸切"
+    />
+    <link rel="canonical" href={canonicalURL} />
+
+    {/* OGP（SNSでシェアされた時の見え方） */}
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImageURL} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:site_name" content={settings.siteName} />
+
+    {/* Twitter（X）カード */}
+    <meta name="twitter:card" content="summary_large_image" />
+
+    {/* Google Fonts：明朝(Noto Serif JP)・ゴシック(Noto Sans JP)・装飾英字(Cormorant Garamond)・英字ラベル(Jost) */}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Jost:wght@400;500&family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400&display=swap"
+      rel="stylesheet"
+    />
+
+    {/* LocalBusiness構造化データ（MEO対策） */}
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={JSON.stringify(structuredData)}
+    />
+    
+    {/* Organization（組織）構造化データ：Google推奨によりトップページのみ出力。ロゴをブランドロゴとして認識させる */}
+    {
+      isHome && (
+        <script
+          type="application/ld+json"
+          is:inline
+          set:html={JSON.stringify(organizationData)}
+        />
+      )
+    }
+
+    {/* GA4：テスト段階はGA4_IDが空のため読み込まれない。本番化フェーズで有効化 */}
+    {
+      GA4_ID && (
+        <>
+          <script
+            is:inline
+            src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
+          />
+          <script is:inline define:vars={{ GA4_ID }}>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){'{'} dataLayer.push(arguments); {'}'}
+            gtag('js', new Date());
+            gtag('config', GA4_ID);
+          </script>
+        </>
+      )
+    }
+  </head>
+  <body>
+    {showChrome && <Header />}
+    <div class:list={['page', { 'page--with-header': showChrome }]}>
+      <slot />
+    </div>
+    {showChrome && <Footer />}
+
+    {/* data-ga 属性のついた要素のクリックをGA4イベントとして送る共通処理。
+        テスト段階は gtag が未定義なので何も起きず、本番接続後に自動で有効化される。 */}
+    <script>
+      document.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const el = target.closest<HTMLElement>('[data-ga]');
+        if (!el) return;
+        const eventName = el.getAttribute('data-ga');
+        if (!eventName) return;
+        // gtag が読み込まれている時だけ送信（未接続時は安全に無視）
+        const w = window as typeof window & { gtag?: (...args: unknown[]) => void };
+        if (typeof w.gtag === 'function') {
+          w.gtag('event', eventName);
+        }
+      });
+    </script>
+  </body>
+</html>

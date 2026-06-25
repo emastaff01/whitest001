@@ -1,0 +1,363 @@
+---
+// =============================================================
+// Header.astro （全ページ共通の固定ヘッダー）
+// -------------------------------------------------------------
+// ・PC：ロゴ ＋ 横並びメニュー ＋ 電話 ＋ 来館予約ボタン
+// ・スマホ/タブレット：ロゴ ＋ 電話 ＋ ハンバーガー（押すとドロワーが開く）
+//
+// ロゴ画像は後日提供のため、今はテキストロゴで仮置きしています。
+// 電話番号タップは phoneCV として計測（本番GA4接続後に有効化）。
+// =============================================================
+
+import { url } from '../../lib/url';
+import { headerNav, navGroups } from '../../lib/navigation';
+import { getSiteSettings } from '../../lib/getSiteSettings';
+import CtaButton from './CtaButton.astro';
+
+const settings = getSiteSettings();
+const phone = settings.nap.phone; // 表示用（0955-22-2021）
+const telHref = `tel:${phone.replace(/[^0-9]/g, '')}`; // 発信用（数字のみ）
+const lineHref = settings.lineUrl || '#'; // LINE URLは後日提供。未設定時は仮で # 
+---
+
+<header class="header">
+  <div class="header__inner">
+    <a class="header__brand" href={url('/')} aria-label="ホワイトハウス伊万里 トップへ">
+      <span class="header__brand-en">WHITE HOUSE IMARI</span>
+      <span class="header__brand-jp">ホワイトハウス伊万里</span>
+    </a>
+
+    <nav class="header__nav" aria-label="メインメニュー">
+      <ul>
+        {
+          headerNav.map((item) => (
+            <li>
+              <a href={url(item.path)}>{item.label}</a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+
+    <div class="header__actions">
+      <a class="header__tel" href={telHref} data-ga="phoneCV" aria-label={`電話する ${phone}`}>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M6.5 4h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 6a2 2 0 0 1 2-2z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.2"
+            stroke-linejoin="round"
+          ></path>
+        </svg>
+        <span class="header__tel-num">{phone}</span>
+      </a>
+
+      <div class="header__reserve">
+        <CtaButton href={url('/contact')} variant="solid">来館予約</CtaButton>
+      </div>
+
+      <button
+        class="header__burger"
+        type="button"
+        aria-label="メニューを開く"
+        aria-expanded="false"
+        aria-controls="global-drawer"
+      >
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- モバイル用ドロワーメニュー（全項目） -->
+<div class="drawer-overlay" hidden></div>
+<aside class="drawer" id="global-drawer" aria-label="メニュー" aria-hidden="true" hidden>
+  <nav class="drawer__nav">
+    {
+      navGroups.map((group) => (
+        <div class="drawer__group">
+          <p class="drawer__group-title">{group.title}</p>
+          <ul>
+            {group.links.map((link) => (
+              <li>
+                <a href={url(link.path)}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </nav>
+
+  <div class="drawer__actions">
+    <CtaButton href={lineHref} variant="line" ga="lineCV" external={Boolean(settings.lineUrl)}>
+      LINEで相談する
+    </CtaButton>
+    <a class="drawer__tel" href={telHref} data-ga="phoneCV">
+      お電話：{phone}
+    </a>
+  </div>
+</aside>
+
+<style>
+  .header {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: var(--header-h);
+    background-color: var(--white);
+    border-bottom: 0.5px solid var(--hairline-dark);
+    z-index: 100;
+  }
+
+  .header__inner {
+    height: 100%;
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .header__brand {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 0 0 auto;
+  }
+  .header__brand-en {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.6rem;
+    color: var(--gray);
+  }
+  .header__brand-jp {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-regular);
+    font-size: 1.05rem;
+    line-height: 1;
+    color: var(--charcoal);
+  }
+
+  .header__nav {
+    display: none;
+  }
+  .header__nav ul {
+    display: flex;
+    gap: clamp(3%, 4vw, 5%); 
+    justify-content:space-between;
+  }
+  .header__nav a {
+    color: var(--dark-gray);
+    white-space: nowrap;
+    font-size: clamp(0.75rem, 4vw, 0.85rem); 
+  }
+  .header__nav a:hover {
+    color: var(--green);
+  }
+
+  .header__actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 0 0 auto;
+  }
+
+  .header__tel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--charcoal);
+  }
+  .header__tel .icon {
+    width: 18px;
+    height: 18px;
+  }
+  .header__tel-num {
+    display: none;
+    font-family: var(--font-en-label);
+    font-size: 0.95rem;
+  }
+
+  .header__reserve {
+    display: none;
+  }
+
+  .header__burger {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+  }
+  .header__burger-line {
+    width: 22px;
+    height: 1px;
+    background-color: var(--charcoal);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .header__burger[aria-expanded='true'] .header__burger-line:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+  .header__burger[aria-expanded='true'] .header__burger-line:nth-child(2) {
+    opacity: 0;
+  }
+  .header__burger[aria-expanded='true'] .header__burger-line:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(44, 44, 42, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 110;
+  }
+  .drawer-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    background-color: var(--off-white);
+    border-left: 0.5px solid var(--hairline-green);
+    transform: translateX(100%);
+    transition: transform 0.28s ease;
+    z-index: 120;
+    padding: calc(var(--header-h) + 16px) 28px 40px;
+    overflow-y: auto;
+  }
+  .drawer.is-open {
+    transform: translateX(0);
+  }
+
+  .drawer__group {
+    margin-bottom: 28px;
+  }
+  .drawer__group-title {
+    font-family: var(--font-en-label);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--green);
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 0.5px solid var(--hairline-green);
+  }
+  .drawer__group ul {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .drawer__group a {
+    font-size: 0.95rem;
+    color: var(--charcoal);
+  }
+  .drawer__group a:hover {
+    color: var(--green);
+  }
+
+  .drawer__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 28px;
+    border-top: 0.5px solid var(--hairline-green);
+  }
+  .drawer__tel {
+    text-align: center;
+    color: var(--charcoal);
+    font-family: var(--font-en-label);
+    font-size: 0.95rem;
+  }
+
+  @media (min-width: 1024px) {
+    .header__nav {
+      display: block;
+      width:100%;
+    }
+    .header__tel-num {
+      display: inline;
+    }
+    .header__reserve {
+      display: block;
+    }
+    .header__burger {
+      display: none;
+    }
+    .drawer,
+    .drawer-overlay {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  // ハンバーガーでドロワーを開閉する処理。
+  // 各要素が無いページでも安全に動くよう null チェックを入れています。
+  const burger = document.querySelector<HTMLButtonElement>('.header__burger');
+  const drawer = document.getElementById('global-drawer');
+  const overlay = document.querySelector<HTMLElement>('.drawer-overlay');
+
+  if (burger && drawer && overlay) {
+    // メニューを開く
+    const openDrawer = () => {
+      drawer.hidden = false;
+      overlay.hidden = false;
+      // hidden解除を1フレーム待ってからクラス付与（transitionを効かせるため）
+      requestAnimationFrame(() => {
+        drawer.classList.add('is-open');
+        overlay.classList.add('is-open');
+      });
+      drawer.setAttribute('aria-hidden', 'false');
+      burger.setAttribute('aria-expanded', 'true');
+      burger.setAttribute('aria-label', 'メニューを閉じる');
+      document.body.style.overflow = 'hidden'; // 背面のスクロールを止める
+    };
+
+    // メニューを閉じる
+    const closeDrawer = () => {
+      drawer.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', 'true');
+      burger.setAttribute('aria-expanded', 'false');
+      burger.setAttribute('aria-label', 'メニューを開く');
+      document.body.style.overflow = '';
+      // アニメーション終了後に hidden を戻す
+      window.setTimeout(() => {
+        drawer.hidden = true;
+        overlay.hidden = true;
+      }, 300);
+    };
+
+    burger.addEventListener('click', () => {
+      const isOpen = burger.getAttribute('aria-expanded') === 'true';
+      isOpen ? closeDrawer() : openDrawer();
+    });
+
+    overlay.addEventListener('click', closeDrawer);
+
+    // Escキーで閉じる
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDrawer();
+    });
+
+    // ドロワー内のリンクを押したら自動で閉じる
+    drawer.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', closeDrawer);
+    });
+  }
+</script>

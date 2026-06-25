@@ -1,0 +1,970 @@
+---
+// =============================================================
+// src/components/admin/ReportPanel.astro
+// -------------------------------------------------------------
+// 管理画面「レポート」タブ。PlanPanel.astro と同じ操作体験に揃えたもの。
+// 画面構成:
+//   ・一覧ビュー：サムネ＋タイトル＋公開バッジ＋公開日／カップル名／タグ の行を並べる。
+//     行クリックで編集ビューへ。
+//   ・編集ビュー：1件だけ表示。「一覧に戻る」で戻る／「Firestore に保存」で確定。
+//   ・並べ替えモード：一覧の「並べ替える」ボタンで切替。モード中だけ
+//     行がドラッグ専用になり、ハンドルで並べ替え。
+//
+// レポート固有の事情:
+//   ・サムネ（thumbnail）に加え、複数画像（gallery = SiteImage[]）を持つ。
+//     画像ピッカーは「サムネ差し替え（1枚）」と「ギャラリー追加（複数）」の2モード。
+//   ・gallery の alt とサムネの alt はタイトルから自動生成（=派生値）。
+//     未保存検知の比較（contentOf）からは外す（並べ替え・開いただけで誤検知しないため）。
+//
+// データの流れ（プランと同じ）:
+//   ・表示は常に1件（編集ビュー）。harvest/populate は editingIndex の1件だけ。
+//   ・保存は working 全件が対象（戻る/保存の前に harvest して working を最新化）。
+//
+// 共通のルール:
+//   ・要素IDは report- で始める（同一ページの他パネルとIDが衝突しないように）。
+//     並べ替えリストの id も #report-reorder-list にする。
+//   ・スタイルは src/styles/admin.css 側。一覧・並べ替えは fair-list*/fair-reorder* を流用する。
+// =============================================================
+
+import fs from 'node:fs';
+
+// 画像ピッカー用の一覧をビルド時に作る（public/images/reports/ の .jpg を列挙）。
+const REPORT_IMG_DIR = 'public/images/reports';
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // 末尾スラッシュを消す（'/test-whi'）
+let reportImages: { value: string; url: string }[] = [];
+if (fs.existsSync(REPORT_IMG_DIR)) {
+  reportImages = fs
+    .readdirSync(REPORT_IMG_DIR)
+    .filter((f) => f.toLowerCase().endsWith('.jpg')) // .webp は対なので除外
+    .sort()
+    .map((f) => ({
+      value: `/images/reports/${f}`, // 保存値（base 無し）
+      url: `${BASE}/images/reports/${f}`, // 表示用（base 付き）
+    }));
+}
+---
+
+<section class="adm-panel" data-panel="report" hidden>
+  <header class="adm-panel__head">
+    <h2 class="adm-panel__title">レポート管理
+      <span id="report-count" class="adm-count"></span>
+      <div class="adm-toolbar">
+        <button type="button" id="report-add-btn" class="adm-btn adm-btn--primary">＋ 新規レポートを追加</button>
+        <button type="button" id="report-export-btn" class="adm-btn adm-btn--export">Firestore に保存</button>
+      </div>
+    </h2>
+    <p class="adm-lead">
+      ウェディングレポートの管理ページ
+    </p>
+    <p id="report-status" class="adm-status"></p>
+  </header>
+
+  <div id="report-editor"></div>
+
+  <!-- 画像ピッカー（パネルに1つだけ。各カードの「画像を選ぶ」から共用する） -->
+  <div id="report-picker" class="adm-picker" hidden>
+    <div class="adm-picker__backdrop" data-picker-close></div>
+    <div class="adm-picker__panel" role="dialog" aria-modal="true" aria-label="画像を選択">
+      <div class="adm-picker__head">
+        <h3 class="adm-picker__title">画像を選ぶ（レポート）</h3>
+        <button type="button" class="adm-btn adm-btn--mini" data-picker-close>閉じる</button>
+      </div>
+      <div id="report-picker-grid" class="adm-picker__grid"></div>
+      <!-- ギャラリー複数選択用のフッター。サムネ選択時は hidden で隠す -->
+      <div id="report-picker-foot" class="adm-picker__foot" hidden>
+        <button type="button" id="report-picker-confirm" class="adm-btn adm-btn--primary" data-picker-confirm>選択した画像を追加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ビルド時に public/images/reports/ から作った画像一覧（value=保存値 / url=表示用） -->
+  <script type="application/json" id="report-image-list" is:inline set:html={JSON.stringify(reportImages)}></script>
+</section>
+
+<script>
+  import type { Report, SiteImage, Taxonomy } from '../../types';
+  // countLabel は件数表示／makeDocId は記事ID自動発番（接頭辞 'r'）。
+  import { countLabel, makeDocId } from '../../lib/admin';
+  // getTaxonomiesFromDb はタグの選択肢マスター（report-tags）取得用。
+  import { getReportsFromDb, saveReportToDb, deleteReportFromDb, getTaxonomiesFromDb } from '../../lib/firestore';
+  import { auth } from '../../lib/firebase';
+  import { onAuthStateChanged } from 'firebase/auth';
+  import Sortable from 'sortablejs'; // 並べ替え（ドラッグ＆ドロップ）。管理画面でのみ読み込む
+
+  // 画像未選択時の既定サムネイル（サムネ必須パネルなので実値として保存する）
+  const NO_IMAGE = '/images/noimage.jpg';
+
+  const init = (): void => {
+    const container = document.querySelector<HTMLElement>('#report-editor');
+    const addBtn = document.querySelector<HTMLButtonElement>('#report-add-btn');
+    const exportBtn = document.querySelector<HTMLButtonElement>('#report-export-btn');
+    const statusEl = document.querySelector<HTMLElement>('#report-status');
+    if (!container || !addBtn || !exportBtn || !statusEl) return;
+
+    // 編集中のデータ。最初は空で、ログイン確定後に Firestore から読み込む
+    let working: Report[] = [];
+    // 直近にDBへ保存済みの id。保存時に「消された id」を割り出して削除同期するために使う
+    let savedIds = new Set<string>();
+    // 公開状態の「最後に読み込み／保存した時点」のスナップショット（id→公開中か）。
+    // 保存時に「表示↔非表示が変わったレポート」を洗い出して確認ポップアップを出すために使う。
+    let savedPub = new Map<string, boolean>();
+    // 「最後に読み込み／保存した時点」の各レポートの中身スナップショット（id→{内容文字列, タイトル}）。
+    let savedSnap = new Map<string, { content: string; title: string }>();
+    // 同じく、保存／読み込み時点の並び順（id を連結した文字列）。表示順だけ変わった検知に使う。
+    let savedOrderSig = '';
+    // タグの選択肢（マスター report-tags）。load() で取得し、描画と取り込みで参照する。
+    let tagChoices: Taxonomy[] = [];
+    // 並べ替え用 Sortable インスタンス。再描画のたびに作り直す（破棄→生成）。
+    let sortable: Sortable | null = null;
+
+    // ---- 画面の状態 ----
+    let view: 'list' | 'edit' = 'list'; // いま一覧か編集か
+    let editingIndex = -1;              // 編集中レポートの working 内の位置（一覧時は -1）
+    let reorderMode = false;            // 並べ替えモードON/OFF（一覧ビューでのみ意味を持つ）
+
+    // ---- セレクタ生成（ri = report index）----
+    const fieldSel = (ri: number, field: string): string =>
+      `[data-ri="${ri}"][data-field="${field}"]`;
+
+    // ---- 値の読み取り（DOM → 値）----
+    const valOf = (sel: string): string => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value.trim() : '';
+    };
+    const rawValOf = (sel: string): string => {
+      // textarea の改行を保つため trim しない読み取り
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      return el ? el.value : '';
+    };
+    const checkedOf = (sel: string): boolean => {
+      const el = container.querySelector<HTMLInputElement>(sel);
+      return el ? el.checked : false;
+    };
+
+    // ---- 値の書き込み（値 → DOM）----
+    const setVal = (sel: string, v: string): void => {
+      const el = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+      if (el) el.value = v;
+    };
+    const setChecked = (sel: string, v: boolean): void => {
+      const el = container.querySelector<HTMLInputElement>(sel);
+      if (el) el.checked = v;
+    };
+
+    // 文字列を HTML に安全に埋め込む（一覧のタイトル等。'<' などを実体参照に変換）
+    const escapeHtml = (s: string): string =>
+      s.replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c)
+      );
+
+    // ステータス表示（早めに定義しておく＝他の関数から呼べるように）
+    const setStatus = (msg: string, kind: 'ok' | 'warn' | ''): void => {
+      statusEl.textContent = msg;
+      statusEl.className = 'adm-status' + (kind ? ' is-' + kind : '');
+    };
+
+    // 保存値(base無し /images/...) → 画面表示URL(base付き)
+    const ASSET_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+    const toUrl = (src: string): string => (src ? `${ASSET_BASE}${src}` : '');
+    // サムネ欄のプレビュー画像を更新（空なら src を外して隠す）
+    const setThumbPreview = (ri: number, src: string, alt: string): void => {
+      const img = container.querySelector<HTMLImageElement>(`[data-ri="${ri}"][data-thumb-preview]`);
+      if (!img) return;
+      if (src) {
+        img.src = toUrl(src);
+        img.hidden = false;
+      } else {
+        img.removeAttribute('src');
+        img.hidden = true;
+      }
+      img.alt = alt ?? '';
+    };
+
+    // ---- ファイル名 / フルパスのヘルパー ----
+    // 画像パスからファイル名だけ取り出す（/images/reports/abc.jpg → abc.jpg）
+    const fileNameOf = (src: string): string => src.split('/').pop() ?? '';
+    // サムネ欄に「表示＝ファイル名／保存＝フルパス」をセットし、プレビューも更新
+    const setThumbField = (ri: number, fullPath: string): void => {
+      const input = container.querySelector<HTMLInputElement>(fieldSel(ri, 'thumbnailSrc'));
+      if (input) {
+        input.value = fileNameOf(fullPath); // 画面にはファイル名だけ
+        input.dataset.fullpath = fullPath; // 実際の保存値（フルパス）は data 属性に隠す
+      }
+      setThumbPreview(ri, fullPath, '');
+    };
+    // 保存用のフルパスを読む（.value はファイル名なので harvest はこちらを読む）
+    const fullPathOf = (ri: number): string => {
+      const input = container.querySelector<HTMLInputElement>(fieldSel(ri, 'thumbnailSrc'));
+      return input?.dataset.fullpath ?? '';
+    };
+
+    // 任意の数値項目を取り込む（空・非数値は undefined）
+    const numOrUndef = (s: string): number | undefined => {
+      if (s === '') return undefined;
+      const n = Number(s);
+      return Number.isNaN(n) ? undefined : n;
+    };
+
+    // ---- ギャラリー: textarea(1行=ファイル名) ⇔ SiteImage[] ----
+    const GALLERY_DIR = '/images/reports/'; // ファイル名→フルパス復元に使う
+    // textarea（1行＝ファイル名）→ SiteImage[]（src=フルパス復元 / alt=タイトル＋連番）
+    const linesToGallery = (text: string, title: string): SiteImage[] =>
+      text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((l) => l.length > 0)
+        .map((name, i) => ({
+          src: name.startsWith('/') ? name : `${GALLERY_DIR}${name}`,
+          alt: `${title}（${i + 1}枚目）`,
+        }));
+    // SiteImage[] → textarea（1行＝ファイル名だけ。alt は画面に出さない）
+    const galleryToLines = (arr: SiteImage[] | undefined): string =>
+      (arr ?? []).map((img) => fileNameOf(img.src)).join('\n');
+    
+    // ギャラリー欄（textarea＝1行1ファイル名）の内容を読み、サムネを並べて表示する。
+    // 表示専用：実データの編集はあくまで textarea 側で行う（保存ロジックは無改修）。
+    const setGalleryPreview = (ri: number): void => {
+      const wrap = container.querySelector<HTMLElement>(`[data-ri="${ri}"][data-gallery-preview]`);
+      const ta = container.querySelector<HTMLTextAreaElement>(fieldSel(ri, 'gallery'));
+      if (!wrap || !ta) return;
+      // textarea の各行（ファイル名）を取り出す（空行は除外）
+      const names = ta.value
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '');
+      wrap.innerHTML = names
+      .map((name) => {
+        const full = name.startsWith('/') ? name : `${GALLERY_DIR}${name}`;
+        return `<span class="adm-gallery-thumb">
+          <img src="${escapeHtml(toUrl(full))}" alt="" loading="lazy" />
+          <button type="button" class="adm-gallery-thumb__del" data-action="del-gallery" data-ri="${ri}" data-gallery-name="${escapeHtml(name)}" aria-label="この画像を外す">×</button>
+        </span>`;
+      })
+      .join('');
+      wrap.hidden = names.length === 0; // 0枚のときは枠ごと隠す
+    };
+
+    // オブジェクトのキー順に依存せず比較できるよう、キーを再帰的にソートして JSON 化する。
+    const sortedJson = (obj: unknown): string => {
+      const sortKeys = (x: unknown): unknown => {
+        if (Array.isArray(x)) return x.map(sortKeys);
+        if (x !== null && typeof x === 'object') {
+          const o = x as Record<string, unknown>;
+          const out: Record<string, unknown> = {};
+          for (const k of Object.keys(o).sort()) out[k] = sortKeys(o[k]);
+          return out;
+        }
+        return x;
+      };
+      return JSON.stringify(sortKeys(obj));
+    };
+
+    // 比較用の「中身」文字列。sortOrder は別枠で見るので除外。
+    // サムネ alt とギャラリー alt はタイトルからの自動派生なので除外（src だけ比較）。
+    // ＝こうしないと「開いただけ」「並べ替えただけ」で中身が変わったと誤検知してしまう。
+    const contentOf = (r: Report): string => {
+      const { sortOrder, thumbnail, gallery, ...rest } = r;
+      void sortOrder;
+      return sortedJson({
+        ...rest,
+        thumbnail: { src: thumbnail.src },
+        gallery: (gallery ?? []).map((g) => g.src),
+      });
+    };
+
+    // 今の working を「保存済み」として記録する（読み込み後・保存成功後に呼ぶ）。
+    const snapshotSaved = (): void => {
+      savedSnap = new Map(
+        working.map((r): [string, { content: string; title: string }] => [
+          r.id,
+          { content: contentOf(r), title: r.title },
+        ])
+      );
+      savedOrderSig = working.map((r) => r.id).join(',');
+    };
+
+    // 未保存のレポートのラベル一覧を返す（修正／新規作成／削除／並び替え）。空配列なら未保存なし。
+    const unsavedLabels = (): string[] => {
+      harvest(); // 編集中の1件を working に反映してから比べる（入力途中も取りこぼさない）
+      const labels: string[] = [];
+      const currentIds = new Set(working.map((r) => r.id));
+      working.forEach((r) => {
+        const snap = savedSnap.get(r.id);
+        if (!snap) labels.push(`【新規作成】${r.title || '（無題）'}`);
+        else if (snap.content !== contentOf(r)) labels.push(`【修正】${r.title || '（無題）'}`);
+      });
+      savedSnap.forEach((snap, id) => {
+        if (!currentIds.has(id)) labels.push(`【削除】${snap.title || id}`);
+      });
+      const sameMembers =
+        currentIds.size === savedSnap.size && [...currentIds].every((id) => savedSnap.has(id));
+      if (sameMembers && working.map((r) => r.id).join(',') !== savedOrderSig) {
+        labels.push('【並び替え】');
+      }
+      return labels;
+    };
+
+    // 未保存があれば status 欄に内容を出す。無ければ status を空にする。
+    // 「一覧に戻る瞬間」「並べ替えモード終了時」だけ呼ぶ（入力のたびには呼ばない）。
+    const noticeUnsaved = (): void => {
+      const labels = unsavedLabels();
+      if (labels.length === 0) {
+        setStatus('', '');
+        return;
+      }
+      setStatus('未保存の内容があります。\n' + labels.join('\n'), 'warn');
+    };
+
+    // Firestore から読んだ1件の必須項目の欠けを埋める（任意項目は触らない）
+    const normalizeReport = (r: Report): Report => {
+      // 旧 tags（id 化前の文字列配列）が Firestore に残っていても引きずらない（今は tagIds に一本化）。
+      const base = { ...r } as Report & { tags?: string[] };
+      delete base.tags;
+      return {
+        ...base,
+        title: base.title ?? '',
+        body: base.body ?? '',
+        thumbnail: { src: base.thumbnail?.src || NO_IMAGE, alt: base.thumbnail?.alt ?? '' },
+        isPublished: base.isPublished ?? false,
+      };
+    };
+
+    // ---- 画面 → working（1件分）----
+    const harvestReport = (report: Report, ri: number): void => {
+      report.id = valOf(fieldSel(ri, 'id'));
+      report.title = valOf(fieldSel(ri, 'title'));
+      const cn = valOf(fieldSel(ri, 'coupleName'));
+      report.coupleName = cn === '' ? undefined : cn;
+      const wd = valOf(fieldSel(ri, 'weddingDate'));
+      report.weddingDate = wd === '' ? undefined : wd;
+      report.guestCount = numOrUndef(valOf(fieldSel(ri, 'guestCount')));
+      report.body = rawValOf(fieldSel(ri, 'body')).trim();
+      report.thumbnail = {
+        src: fullPathOf(ri) || NO_IMAGE, // .value はファイル名なので data-fullpath を読む
+        alt: report.title, // alt はタイトルを自動採用（title は上で取り込み済み）
+      };
+      // alt をタイトルから自動生成するため title を渡す
+      const gallery = linesToGallery(rawValOf(fieldSel(ri, 'gallery')), report.title);
+      report.gallery = gallery.length ? gallery : undefined;
+      // タグ：マスター由来のチェックボックスから、チェックされた id を集める。空配列なら undefined。
+      const tagIds = tagChoices
+        .map((c) => c.id)
+        .filter((id) => checkedOf(fieldSel(ri, 'tagIds') + `[data-tag-id="${id}"]`));
+      report.tagIds = tagIds.length ? tagIds : undefined;
+      // 公開状態：セレクトの値（published/hidden）を真偽に変換。
+      report.isPublished = valOf(fieldSel(ri, 'isPublished')) === 'published';
+      const pa = valOf(fieldSel(ri, 'publishedAt'));
+      report.publishedAt = pa === '' ? undefined : pa;
+      // sortOrder（任意・数値）。並べ替えで管理するが、値の往復は hidden input 経由で行う。
+      report.sortOrder = numOrUndef(valOf(fieldSel(ri, 'sortOrder')));
+    };
+    // 編集中の1件だけを working に退避する（一覧・並べ替え時はカードが無いので何もしない）
+    const harvest = (): void => {
+      if (view !== 'edit' || editingIndex < 0) return;
+      const report = working[editingIndex];
+      if (report) harvestReport(report, editingIndex);
+    };
+
+    // ---- working → 画面（1件分）----
+    const populateReport = (report: Report, ri: number): void => {
+      setVal(fieldSel(ri, 'id'), report.id);
+      setVal(fieldSel(ri, 'title'), report.title);
+      setVal(fieldSel(ri, 'coupleName'), report.coupleName ?? '');
+      setVal(fieldSel(ri, 'weddingDate'), report.weddingDate ?? '');
+      setVal(fieldSel(ri, 'guestCount'), report.guestCount === undefined ? '' : String(report.guestCount));
+      setVal(fieldSel(ri, 'body'), report.body);
+      setThumbField(ri, report.thumbnail.src); // 表示=ファイル名/保存=フルパス/プレビュー更新
+      setVal(fieldSel(ri, 'gallery'), galleryToLines(report.gallery));
+      setGalleryPreview(ri); // textarea にギャラリー値を入れた直後にサムネ帯も更新
+      // タグ：report.tagIds に入っている id のチェックを入れる。
+      const checkedTag = new Set(report.tagIds ?? []);
+      tagChoices.forEach((c) => {
+        setChecked(fieldSel(ri, 'tagIds') + `[data-tag-id="${c.id}"]`, checkedTag.has(c.id));
+      });
+      // 真偽 → セレクトの値（published/hidden）。
+      setVal(fieldSel(ri, 'isPublished'), report.isPublished ? 'published' : 'hidden');
+      setVal(fieldSel(ri, 'publishedAt'), report.publishedAt ?? '');
+      setVal(fieldSel(ri, 'sortOrder'), report.sortOrder === undefined ? '' : String(report.sortOrder));
+    };
+    // 編集中の1件だけを画面に流し込む
+    const populateOne = (ri: number): void => {
+      const report = working[ri];
+      if (report) populateReport(report, ri);
+    };
+
+    // ---- HTML 組み立て（値は入れず、構造と data-* だけ）----
+    const reportCard = (_report: Report, ri: number): string => {
+      return `
+      <section class="adm-card">
+        <div class="adm-card__head">
+          <h2>No. ${ri + 1}</h2>
+          <label class="adm-title"><span class="adm-title__title">タイトル</span>
+            <input type="text" data-ri="${ri}" data-field="title" />
+          </label>
+          <label class="adm-pub"><span class="adm-pub__title">公開状態</span>
+            <select data-ri="${ri}" data-field="isPublished">
+              <option value="hidden">非表示</option>
+              <option value="published">表示</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="adm-id"><span class="adm-id__title">ID（自動発番・編集不可）</span>
+          <input type="text" data-ri="${ri}" data-field="id" readonly />
+        </label>
+
+        <div class="adm-card__body">
+          <div class="adm-row">
+            <div class="adm-card__first">
+              <label class="adm-field">
+                <span class="adm-field-title">カップル名（任意・イニシャル等）</span>
+                <input type="text" data-ri="${ri}" data-field="coupleName" placeholder="K & A" />
+              </label>
+              <label class="adm-field">
+                <span class="adm-field-title">挙式日（任意）</span>
+                <input type="date" data-ri="${ri}" data-field="weddingDate" />
+              </label>
+              <label class="adm-field adm-field--narrow">
+                <span class="adm-field-title">招待人数（任意）</span>
+                <input type="number" data-ri="${ri}" data-field="guestCount" />
+              </label>
+              <label class="adm-field adm-field--narrow">
+                <span class="adm-field-title">タグ（「タグ／カテゴリー管理」のマスターから選択・複数可）</span>
+                <div class="adm-radios">
+                ${
+                  tagChoices.length
+                    ? tagChoices
+                        .map(
+                          (c) => `
+                <label class="adm-radio"><input type="checkbox" data-ri="${ri}" data-field="tagIds" data-tag-id="${c.id}" /> ${c.label}</label>`,
+                        )
+                        .join('')
+                    : '<p class="adm-hint">選択肢がまだありません。「タグ／カテゴリー管理」タブの「レポートのタグ」で追加してください。</p>'
+                }
+                </div>
+              </label>
+            </div>
+            <div class="adm-card__second">
+              <label class="adm-field">
+                <span class="adm-field-title">サムネイル画像</span>
+                <div class="adm-thumb">
+                  <img class="adm-thumb__preview" data-ri="${ri}" data-thumb-preview alt="" hidden />
+                  <input type="text" data-ri="${ri}" data-field="thumbnailSrc" readonly placeholder="（「画像を選ぶ」から選択）" />
+                  <button type="button" class="adm-btn adm-btn--mini" data-action="pick-thumb" data-ri="${ri}">画像を選ぶ</button>
+                </div>
+              </label>
+            </div>
+          </div>
+          <label class="adm-field">
+            <span class="adm-field-title">本文（改行はそのまま表示されます）</span>
+            <textarea rows="6" data-ri="${ri}" data-field="body"></textarea>
+          </label>
+          <span class="adm-field-title">ギャラリー画像（1行に1枚／任意）</span>
+          <label class="adm-field">
+            
+            <textarea rows="4" data-ri="${ri}" data-field="gallery" placeholder="sample-report-01-01.jpg&#10;sample-report-01-02.jpg" hidden></textarea>
+            </label>
+            <!-- ギャラリーに入っている画像のサムネ一覧（テキストエリアの内容から自動生成・表示専用） -->
+            <div class="adm-gallery-preview" data-ri="${ri}" data-gallery-preview hidden></div>
+            <p class="adm-hint">「＋ ギャラリーに画像を追加」から選べます。各サムネイルの × で外せます。代替テキスト(alt)はタイトルから自動で付きます。</p>
+          <button type="button" class="adm-btn adm-btn--mini" data-action="add-gallery" data-ri="${ri}">＋ ギャラリーに画像を追加</button>
+
+          <div class="adm-row">
+            <label class="adm-field">
+              <span class="adm-field-title">公開日（任意・推奨）</span>
+              <input type="date" data-ri="${ri}" data-field="publishedAt" />
+            </label>
+          </div>
+          <!-- 表示順は「並べ替え」で管理するので画面には出さない。
+               ただし値の往復（populate→harvest）に input は必要なので hidden で残す。 -->
+          <input type="hidden" data-ri="${ri}" data-field="sortOrder" />
+
+          <button type="button" class="adm-btn adm-btn--danger" data-action="del-report" data-ri="${ri}">レポート削除</button>
+        </div>
+      </section>`;
+    };
+
+    // ---- 一覧ビュー用：id 配列 → ラベル配列（マスターに無い id は捨てる）----
+    const labelsOf = (ids: string[] | undefined, choices: Taxonomy[]): string[] => {
+      if (!ids || ids.length === 0) return [];
+      return ids
+        .map((id) => choices.find((c) => c.id === id)?.label)
+        .filter((label): label is string => !!label);
+    };
+
+    // ---- 一覧ビューの行（クリックで編集へ。data-field を持たせない＝harvest に拾われない）----
+    const reportListItem = (report: Report, ri: number): string => {
+      const thumbUrl = toUrl(report.thumbnail.src);                          // base 付きの表示用URL
+      const pubDate = report.publishedAt || '未設定';                          // 公開日
+      const couple = report.coupleName || '未設定';                            // カップル名
+      const tagsText = labelsOf(report.tagIds, tagChoices).join('、') || '未設定'; // タグ
+      return `
+      <li class="fair-list__row">
+        <button type="button" class="fair-list__btn" data-action="edit-report" data-ri="${ri}">
+          <span class="fair-list__thumb">
+            <img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(report.title)}" loading="lazy" />
+          </span>
+          <span class="fair-list__main">
+            <span class="fair-list__titlerow">
+              <span class="fair-list__no">No. ${ri + 1}</span>
+              <span class="fair-list__title">${escapeHtml(report.title) || '（無題）'}</span>
+              <span class="fair-list__badge ${report.isPublished ? 'is-pub' : 'is-unpub'}">${report.isPublished ? '表示' : '非表示'}</span>
+            </span>
+            <span class="fair-list__meta"><span class="fair-list__key">公開日</span>${escapeHtml(pubDate)}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">カップル名</span>${escapeHtml(couple)}</span>
+            <span class="fair-list__meta"><span class="fair-list__key">タグ</span>${escapeHtml(tagsText)}</span>
+          </span>
+        </button>
+      </li>`;
+    };
+
+    // ---- 並べ替えモードの行（ドラッグ専用。クリックで編集に飛ばないよう button 要素にしない）----
+    const reorderItem = (report: Report, ri: number): string => `
+      <li class="fair-reorder__item" data-reorder-index="${ri}">
+        <span class="fair-reorder__handle" aria-hidden="true">≡</span>
+        <span class="fair-reorder__no">No. ${ri + 1}</span>
+        <span class="fair-reorder__title">${escapeHtml(report.title) || '（無題）'}</span>
+      </li>`;
+
+    // ---- 一覧ビュー全体（通常 or 並べ替えモード）----
+    // ※ 並べ替えリストの id は #report-reorder-list（他パネルと区別する）。
+    const listViewHtml = (): string => {
+      if (reorderMode) {
+        const items = working.map((r, i) => reorderItem(r, i)).join('');
+        return `
+        <div class="fair-list">
+          <div class="fair-list__bar">
+            <button type="button" class="adm-btn" data-action="toggle-reorder">並べ替えを終了</button>
+            <span class="adm-hint">≡ をドラッグして表示順を入れ替え。終わったら「Firestore に保存」で確定します。</span>
+          </div>
+          <ul class="fair-reorder__list" id="report-reorder-list">${items}</ul>
+        </div>`;
+      }
+      const items = working.map((r, i) => reportListItem(r, i)).join('');
+      const empty =
+        working.length === 0
+          ? `<p class="adm-hint">レポートがありません。「＋ 新規レポートを追加」から作成してください。</p>`
+          : '';
+      return `
+      <div class="fair-list">
+        <div class="fair-list__bar">
+          <button type="button" class="adm-btn" data-action="toggle-reorder">並べ替える</button>
+        </div>
+        <ul class="fair-list__items">${items}</ul>
+        ${empty}
+      </div>`;
+    };
+
+    // ---- 編集ビュー全体（1件のカード＋戻るボタン）----
+    const editViewHtml = (ri: number): string => `
+      <div class="fair-edit">
+        <div class="fair-edit__bar">
+          <button type="button" class="adm-btn" data-action="back-to-list">← 一覧に戻る</button>
+        </div>
+        ${reportCard(working[ri]!, ri)}
+      </div>`;
+
+    // 並べ替え一覧に Sortable を初期化（並べ替えモードのときだけ呼ぶ）。
+    const initSortable = (): void => {
+      const listEl = container.querySelector<HTMLElement>('#report-reorder-list');
+      if (!listEl) return;
+      sortable?.destroy(); // 古いインスタンスを破棄（DOM を作り直すので二重登録を防ぐ）
+      sortable = Sortable.create(listEl, {
+        handle: '.fair-reorder__handle', // ハンドル（≡）部分だけドラッグ可能にする
+        animation: 150,
+        onEnd: (evt) => {
+          const from = evt.oldIndex;
+          const to = evt.newIndex;
+          if (from === undefined || to === undefined || from === to) return;
+          const moved = working.splice(from, 1)[0]; // 動かした1件を抜き出す
+          if (!moved) return;
+          working.splice(to, 0, moved); // 新しい位置に挿し込む
+          working.forEach((r, i) => {
+            r.sortOrder = i; // 上から 0,1,2… に振り直す
+          });
+          render(); // 一覧を新しい順で描き直す（Sortable も貼り直される）
+        },
+      });
+    };
+
+    // ---- 描画（state を見て一覧/編集を出し分ける）----
+    const render = (): void => {
+      sortable?.destroy(); // どのビューでも一旦破棄。並べ替えモードのときだけ後で貼り直す
+      sortable = null;
+
+      if (view === 'edit' && editingIndex >= 0 && working[editingIndex]) {
+        container.innerHTML = editViewHtml(editingIndex);
+        populateOne(editingIndex); // 1件分だけ値を流し込む
+      } else {
+        // 編集対象が無ければ一覧に戻す（安全側）
+        view = 'list';
+        editingIndex = -1;
+        container.innerHTML = listViewHtml();
+        if (reorderMode) initSortable();
+      }
+
+      addBtn.hidden = view === 'edit'; // 編集中は「＋新規追加」を隠す（一覧でのみ追加）
+      const countEl = document.querySelector<HTMLSpanElement>('#report-count');
+      if (countEl) countEl.textContent = countLabel(working);
+    };
+
+    // 新規レポートのひな型（必須項目だけ）。id は makeDocId('r') で自動発番（新規作成時のみ）。
+    const blankReport = (): Report => ({
+      id: makeDocId('r'),
+      title: '',
+      body: '',
+      thumbnail: { src: NO_IMAGE, alt: '' },
+      isPublished: false,
+    });
+
+    // 書き出し前の簡易チェック（ビルドを壊しやすい・表示が崩れやすい項目だけ）
+    const validate = (): string[] => {
+      const errs: string[] = [];
+      const seen = new Set<string>();
+      working.forEach((report, i) => {
+        // 一覧では1件ずつしか見えないので、どのレポートの問題か分かるよう「No.＋タイトル」で示す
+        const label = `No.${i + 1}${report.title ? `「${report.title}」` : '（無題）'}`;
+        if (report.id === '') errs.push(`${label}: ID が空です`);
+        else if (seen.has(report.id)) errs.push(`${label}: ID「${report.id}」が重複しています`);
+        seen.add(report.id);
+        if (report.title === '') errs.push(`${label}: タイトルが空です`);
+        if (report.body === '') errs.push(`${label}: 本文が空です`);
+        if (report.thumbnail.src === '') errs.push(`${label}: サムネイル画像が未選択です`);
+        // alt はタイトルから自動生成するため、alt 単独の空チェックは不要
+      });
+      return errs;
+    };
+
+    // ---- 画像ピッカー（パネルに1つ。各カードの「画像を選ぶ」から共用）----
+    const picker = document.querySelector<HTMLElement>('#report-picker');
+    const pickerGrid = document.querySelector<HTMLElement>('#report-picker-grid');
+    const footEl = document.querySelector<HTMLElement>('#report-picker-foot');
+    const confirmBtn = document.querySelector<HTMLButtonElement>('#report-picker-confirm');
+    let pickerTargetRi = -1; // いま選択対象のカード番号（ri）
+    let pickerMode: 'thumb' | 'gallery' = 'thumb'; // thumb=サムネ差し替え / gallery=ギャラリーに追加
+    let pickerSelected = new Set<string>(); // gallery で選んだ保存値（フルパス）を貯める
+    const updateConfirmLabel = (): void => {
+      if (confirmBtn) confirmBtn.textContent = `選択した画像を追加（${pickerSelected.size}）`;
+    };
+
+    const imageListEl = document.querySelector<HTMLScriptElement>('#report-image-list');
+    const imageList: { value: string; url: string }[] =
+      imageListEl ? JSON.parse(imageListEl.textContent ?? '[]') : [];
+
+    // グリッドは中身が固定なので一度だけ組み立てる
+    if (pickerGrid) {
+      pickerGrid.innerHTML = imageList
+        .map(
+          (img) => `
+        <button type="button" class="adm-picker__item" data-pick-value="${img.value}">
+          <img src="${img.url}" alt="" loading="lazy" />
+          <span class="adm-picker__name">${img.value.split('/').pop() ?? ''}</span>
+        </button>`
+        )
+        .join('');
+    }
+
+    const openPicker = (ri: number, mode: 'thumb' | 'gallery'): void => {
+      if (!picker) return;
+      pickerTargetRi = ri;
+      pickerMode = mode;
+      pickerSelected = new Set<string>(); // 前回の選択を持ち越さない
+      pickerGrid?.querySelectorAll('.is-selected').forEach((el) => el.classList.remove('is-selected'));
+    
+      // ギャラリー追加のときは、すでにギャラリーに入っている画像を最初からチェック状態にする。
+      // （今のギャラリー＝textareaの各行ファイル名 と、グリッド各画像のファイル名を突き合わせる）
+      if (mode === 'gallery') {
+        const galEl = container.querySelector<HTMLTextAreaElement>(fieldSel(ri, 'gallery'));
+        const existingNames = new Set(
+          (galEl?.value ?? '')
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l !== '')
+        );
+        pickerGrid?.querySelectorAll<HTMLElement>('button[data-pick-value]').forEach((btn) => {
+          const value = btn.dataset.pickValue ?? '';
+          if (existingNames.has(fileNameOf(value))) {
+            pickerSelected.add(value);        // 既存分も選択集合に入れておく
+            btn.classList.add('is-selected'); // CSS の ::after で緑チェックが付く
+          }
+        });
+      }
+    
+      if (footEl) footEl.hidden = mode !== 'gallery'; // 「追加」ボタンはギャラリーのときだけ
+      updateConfirmLabel();
+      picker.hidden = false;
+    };
+    const closePicker = (): void => {
+      if (!picker) return;
+      picker.hidden = true;
+      pickerTargetRi = -1;
+      pickerMode = 'thumb';
+      pickerSelected = new Set<string>();
+      if (footEl) footEl.hidden = true;
+    };
+
+    // 画像クリック → モードに応じて反映
+    if (pickerGrid) {
+      pickerGrid.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (!(el instanceof Element)) return;
+        const item = el.closest<HTMLButtonElement>('button[data-pick-value]');
+        if (!item || pickerTargetRi < 0) return;
+        const value = item.dataset.pickValue ?? '';
+
+        if (pickerMode === 'gallery') {
+          // ギャラリー：クリックで選択をトグル（閉じずに何枚でも選べる）
+          if (pickerSelected.has(value)) {
+            pickerSelected.delete(value);
+            item.classList.remove('is-selected');
+          } else {
+            pickerSelected.add(value);
+            item.classList.add('is-selected');
+          }
+          updateConfirmLabel();
+          return; // ここでは閉じない
+        }
+        // サムネ：1枚だけ。選んだら即セットして閉じる
+        setThumbField(pickerTargetRi, value);
+        closePicker();
+      });
+    }
+
+    // 背景クリック・「閉じる」ボタンで閉じる
+    if (picker) {
+      picker.addEventListener('click', (ev) => {
+        const el = ev.target;
+        if (el instanceof Element && el.closest('[data-picker-close]')) closePicker();
+      });
+    }
+
+    // 「選択した画像を追加」：チェックした分をまとめてギャラリーへ足す
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => {
+        if (pickerTargetRi < 0 || pickerSelected.size === 0) {
+          closePicker();
+          return;
+        }
+        const galEl = container.querySelector<HTMLTextAreaElement>(fieldSel(pickerTargetRi, 'gallery'));
+        if (galEl) {
+          const existing = galEl.value
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l !== '');
+          const adding = [...pickerSelected]
+            .map((v) => fileNameOf(v)) // 保存値（フルパス）→ ファイル名
+            .filter((name) => !existing.includes(name)); // 既にある分は足さない
+          galEl.value = [...existing, ...adding].join('\n');
+            setGalleryPreview(pickerTargetRi); // 追加直後にサムネ帯を更新（closePickerでriが-1に戻る前に呼ぶ）
+          }
+          closePicker();
+      });
+    }
+
+    // index.astro のタブ切り替えから「未保存のレポート一覧」を読めるよう、関数を window に登録する。
+    const w = window as unknown as { adminDirtyReporters?: Record<string, () => string[]> };
+    w.adminDirtyReporters = w.adminDirtyReporters ?? {};
+    w.adminDirtyReporters.report = unsavedLabels;
+
+    // ページ離脱（閉じる・再読み込み・別URLへ移動）時、未保存があればブラウザ標準の警告を出す。
+    window.addEventListener('beforeunload', (e) => {
+      if (unsavedLabels().length === 0) return;
+      e.preventDefault();
+    });
+
+    // ---- イベント（構造変更・ナビゲーションはイベント委譲でまとめて受ける）----
+    container.addEventListener('click', (ev) => {
+      const el = ev.target;
+      if (!(el instanceof Element)) return;
+      const btn = el.closest<HTMLButtonElement>('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action ?? '';
+      const ri = btn.dataset.ri !== undefined ? Number(btn.dataset.ri) : -1;
+
+      // 画像ピッカーを開く（harvest 不要）
+      if (action === 'pick-thumb') {
+        openPicker(ri, 'thumb');
+        return;
+      }
+      if (action === 'add-gallery') {
+        openPicker(ri, 'gallery');
+        return;
+      }
+      // サムネの「×」：そのファイル名の行を textarea から消し、サムネ帯を更新する
+      if (action === 'del-gallery') {
+        const name = btn.dataset.galleryName ?? '';
+        const galEl = container.querySelector<HTMLTextAreaElement>(fieldSel(ri, 'gallery'));
+        if (galEl && name) {
+          const kept = galEl.value
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l !== '' && l !== name); // 対象ファイル名の行だけ除外
+          galEl.value = kept.join('\n');
+          setGalleryPreview(ri); // 消した結果をサムネ帯に反映
+        }
+        return; // 全体 render は不要（textarea は隠れているため）
+      }
+
+      // ---- ナビゲーション系 ----
+      if (action === 'edit-report') {
+        if (ri >= 0) {
+          view = 'edit';
+          editingIndex = ri;
+          render();
+        }
+        return;
+      }
+      if (action === 'back-to-list') {
+        harvest(); // 編集中の内容を working に退避してから戻る（変更は保持される）
+        view = 'list';
+        editingIndex = -1;
+        render();
+        noticeUnsaved(); // 一覧に戻る瞬間だけ、未保存があれば status に表示
+        return;
+      }
+      if (action === 'toggle-reorder') {
+        reorderMode = !reorderMode;
+        render();
+        if (reorderMode) setStatus('並べ替えモードです。≡ をドラッグしてください。', '');
+        else noticeUnsaved(); // 並べ替えモードを抜けた瞬間、未保存があれば status に表示
+        return;
+      }
+
+      // ---- 編集ビュー内のカード操作（削除）----
+      harvest();
+      if (action === 'del-report') {
+        if (ri >= 0 && window.confirm('このレポートを削除します。よろしいですか？')) {
+          working.splice(ri, 1);
+          view = 'list'; // 削除したら一覧へ戻る
+          editingIndex = -1;
+        }
+      }
+      render();
+      });
+      
+      // ギャラリー欄を手入力で編集したときも、サムネ帯を追従させる
+      container.addEventListener('input', (ev) => {
+        const el = ev.target;
+        if (el instanceof HTMLTextAreaElement && el.dataset.field === 'gallery') {
+          const ri = el.dataset.ri !== undefined ? Number(el.dataset.ri) : -1;
+          if (ri >= 0) setGalleryPreview(ri);
+        }
+      });
+      
+      addBtn.addEventListener('click', () => {
+      harvest(); // 編集中があれば退避（一覧なら何もしない）
+      working.push(blankReport());
+      view = 'edit';
+      editingIndex = working.length - 1; // 追加した新規レポートをそのまま編集ビューで開く
+      render();
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      harvest(); // 編集中の1件を最新化（一覧/並べ替え時は何もしない）
+
+      const errs = validate();
+      if (errs.length > 0) {
+        const ok = window.confirm('入力に確認ポイントがあります。それでも保存しますか？\n\n' + errs.join('\n'));
+        if (!ok) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      // 公開状態（表示↔非表示）が変わるレポートを洗い出して、まとめて確認する。
+      const pubChanges = working
+        .filter((r) => savedPub.has(r.id) && savedPub.get(r.id) !== r.isPublished)
+        .map((r) => `${r.title || r.id}: ${r.isPublished ? '非表示 → 表示' : '表示 → 非表示'}`);
+      if (pubChanges.length > 0) {
+        const okPub = window.confirm(
+          '公開状態が変わるレポートがあります。保存してよいですか？\n\n' + pubChanges.join('\n')
+        );
+        if (!okPub) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      // 削除同期：読み込み時にあった id のうち、今 working に無い id を「削除対象」にする。
+      const currentIds = new Set(working.map((r) => r.id));
+      const toDelete = [...savedIds].filter((id) => !currentIds.has(id));
+
+      if (toDelete.length > 0) {
+        const okDel = window.confirm(
+          `次の ${toDelete.length} 件を Firestore から削除します（元に戻せません）:\n` + toDelete.join('\n')
+        );
+        if (!okDel) {
+          setStatus('保存を中止しました。', 'warn');
+          return;
+        }
+      }
+
+      exportBtn.disabled = true;
+      const original = exportBtn.textContent ?? '';
+      exportBtn.textContent = '保存中…';
+      setStatus('Firestore に保存しています…', '');
+
+      try {
+        for (const id of toDelete) {
+          await deleteReportFromDb(id);
+        }
+        for (const report of working) {
+          await saveReportToDb(report);
+        }
+        savedIds = new Set(currentIds);
+        savedPub = new Map(working.map((r): [string, boolean] => [r.id, r.isPublished])); // 公開状態スナップショット更新
+        snapshotSaved(); // 中身・並び順のスナップショットも更新（＝未保存ゼロになる）
+        setStatus(`保存しました（更新 ${working.length} 件 / 削除 ${toDelete.length} 件）。`, 'ok');
+      } catch (e) {
+        console.error('保存失敗:', e);
+        setStatus('保存に失敗しました（ログイン状態・通信・ルールを確認してください）。', 'warn');
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = original;
+      }
+    });
+
+    // ---- Firestore からの読み込み（ログイン確定後だけ呼ぶ）----
+    const load = async (): Promise<void> => {
+      setStatus('読み込み中…', '');
+      try {
+        // レポート本体と、タグの選択肢マスター（report-tags）を同時に取得する。
+        const [reports, taxonomies] = await Promise.all([getReportsFromDb(), getTaxonomiesFromDb()]);
+        tagChoices = taxonomies
+          .filter((t) => t.group === 'report-tags' && t.isPublished)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        working = reports.map(normalizeReport);
+        savedIds = new Set(working.map((r) => r.id));
+        savedPub = new Map(working.map((r): [string, boolean] => [r.id, r.isPublished])); // 公開状態スナップショット
+        snapshotSaved(); // 中身・並び順のスナップショット（＝読み込み直後は未保存なし）
+        // 読み込み直後は必ず一覧から（編集状態をリセット）
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        render();
+        setStatus('', ''); // 読み込み直後は未保存なし＝status は空にする
+      } catch (e) {
+        console.error('読み込み失敗:', e);
+        setStatus('読み込みに失敗しました（ログイン状態・通信を確認してください）。', 'warn');
+      }
+    };
+
+    // ログイン状態が確定してから読み込む（ルールが auth != null のため、認証前に読むと permission-denied）。
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        void load();
+      } else {
+        working = [];
+        view = 'list';
+        editingIndex = -1;
+        reorderMode = false;
+        savedPub = new Map();
+        savedSnap = new Map();
+        savedOrderSig = '';
+        render();
+      }
+    });
+  };
+
+  init();
+</script>

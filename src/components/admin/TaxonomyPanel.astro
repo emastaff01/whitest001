@@ -1,0 +1,571 @@
+---
+// =============================================================
+// src/components/admin/TaxonomyPanel.astro
+// -------------------------------------------------------------
+// タグ／カテゴリーのマスター管理パネル（複数語彙対応・まとめて1保存）。
+// ・groups に語彙の配列を渡す。語彙ごとに見出し付きセクションを縦に並べ、
+//   「Firestore に保存」ボタン1つで全語彙をまとめて保存する。
+// ・tabKey を渡すと、その値で表示パネル(data-panel)と未保存レポーター登録を行う
+//   （例: tabKey="fair-tax"）。サイドバーのサブメニューから1行先として開ける。
+// ・表示順（sortOrder）の入力UIは廃止。既存データの値はそのまま保持し、編集はしない。
+// =============================================================
+import type { TaxonomyGroup } from '../../types';
+import { listIcons } from '../../lib/fairContentIcons'; // アイコン一覧（ビルド時にフォルダ列挙）
+
+interface GroupConfig {
+  group: TaxonomyGroup;
+  groupLabel: string;
+  unitLabel?: string;
+  idPlaceholder?: string;
+  idPrefix?: string;    // 追加: 指定するとID自動採番・入力欄がreadonly（例: 'ft-'）
+  withIcon?: boolean;
+}
+
+interface Props {
+  groups?: GroupConfig[]; // 管理する語彙の配列（必須に近い）
+  tabKey?: string;        // この行き先のキー（danta-panel と未保存登録に使用）
+  title?: string;         // パネル見出し（省略時は先頭語彙のラベルを使う）
+}
+const { groups, tabKey, title } = Astro.props;
+
+// groups が無い場合は空配列（呼び出し元で必ず渡す前提）
+const resolvedGroups: GroupConfig[] = groups ?? [];
+
+const panelTitle = title ?? resolvedGroups[0]?.groupLabel ?? 'タグ／カテゴリー管理';
+const dataPanelKey = tabKey ?? 'taxonomy'; // tabKey 無指定時のフォールバック（念のため残す）    
+    // アイコンピッカーを出すか：withIcon の語彙が1つでもあれば true（現状 fair-contents のみ）。
+    // false のパネルではピッカーのHTML自体を出さない（無駄な空モーダルを作らない）。
+    const hasIconPicker = resolvedGroups.some((g) => g.withIcon);
+    // アイコンピッカーに並べる一覧。withIcon の語彙があるときだけ列挙する。
+    const iconList = hasIconPicker ? listIcons() : [];
+---
+
+<section class="adm-panel js-tax-panel" data-panel={dataPanelKey} data-tab-key={tabKey ?? ''} hidden>
+  <header class="adm-panel__head">
+    <h2 class="adm-panel__title">{panelTitle}
+    <span class="adm-count" data-role="count"></span>
+
+    <div class="adm-toolbar">
+      <button type="button" class="adm-btn adm-btn--export" data-role="export">Firestore に保存</button>
+    </div>
+    </h2>
+
+    <p class="adm-lead">
+      タグ・カテゴリーの選択肢（マスター）を管理します。複数の分類があっても、保存はこの1つのボタンでまとめて行います。<br>
+      ※IDは自動入力です。
+    </p>
+    
+    <p class="adm-status" data-role="status"></p>
+  </header>
+
+  <!-- 語彙の設定を JSON で script へ渡す（属性エスケープを避けるため JSON 島を使う） -->
+  <script type="application/json" data-role="groups-config" is:inline set:html={JSON.stringify(resolvedGroups)}
+  ></script>
+
+<div data-role="editor"></div>
+  
+{hasIconPicker && (
+  <>
+    <!-- ビルド時に列挙したアイコン一覧（key=ファイル名 / url=表示パス）をクライアントへ渡す -->
+    <script type="application/json" data-role="icon-list" is:inline set:html={JSON.stringify(iconList)}></script>
+    <div class="adm-picker" data-role="icon-picker" hidden>
+      <div class="adm-picker__backdrop" data-picker-close></div>
+      <div class="adm-picker__panel" role="dialog" aria-modal="true" aria-label="アイコンを選択">
+        <div class="adm-picker__head">
+          <h3 class="adm-picker__title">アイコンを選ぶ</h3>
+          <button type="button" class="adm-btn adm-btn--mini" data-picker-close>閉じる</button>
+        </div>
+        <div class="adm-picker__grid" data-role="icon-grid"></div>
+      </div>
+    </div>
+  </>
+)}
+  </section>
+
+<script>
+  import type { Taxonomy, TaxonomyGroup } from '../../types';
+  // 件数表示に使う
+  import { countLabel } from '../../lib/admin';
+  // Firestore の読み書き（マスター用）
+  import { getTaxonomiesFromDb, saveTaxonomyToDb, deleteTaxonomyFromDb } from '../../lib/firestore';
+  // ログイン状態の入口と監視（読み込みはログイン確定後に行うため）
+  import { auth } from '../../lib/firebase';
+  import { onAuthStateChanged } from 'firebase/auth';
+ 
+
+  // 語彙設定の型（フロントマターの GroupConfig と対応）
+  type GroupConfig = {
+    group: TaxonomyGroup;
+    groupLabel: string;
+    unitLabel?: string;
+    idPlaceholder?: string;
+    idPrefix?: string;    // 追加
+    withIcon?: boolean;
+  };
+  // ---- 1パネルを初期化する ----
+  // Astro は import 付き script をページで1回しか実行しないため、
+  // 末尾のループでページ上の全パネルを個別に立ち上げる。
+  const initPanel = (panel: HTMLElement): void => {
+    // 語彙設定（配列）を JSON 島から読む
+    const cfgEl = panel.querySelector<HTMLElement>('[data-role="groups-config"]');
+    let groupCfgs: GroupConfig[] = [];
+    try {
+      groupCfgs = JSON.parse(cfgEl?.textContent ?? '[]') as GroupConfig[];
+    } catch {
+      groupCfgs = [];
+    }
+    if (groupCfgs.length === 0) return;
+
+    // この行き先のキー（空なら未保存レポーターを登録しない＝従来タブの単一語彙など）
+    const tabKey = panel.dataset.tabKey ?? '';
+
+    // group → 設定 の早見表（withIcon やラベルを引く）
+    const cfgByGroup = new Map<string, GroupConfig>(groupCfgs.map((c) => [c.group, c]));
+    // このパネルが扱う group の集合（読み込み・削除同期の安全範囲）
+    const groupSet = new Set<string>(groupCfgs.map((c) => c.group));
+
+    const container = panel.querySelector<HTMLElement>('[data-role="editor"]');
+    const exportBtn = panel.querySelector<HTMLButtonElement>('[data-role="export"]');
+    const statusEl = panel.querySelector<HTMLElement>('[data-role="status"]');
+    const countEl = panel.querySelector<HTMLElement>('[data-role="count"]');
+    if (!container || !exportBtn || !statusEl) return;
+    
+    // アイコン一覧（JSON島）を読み、キー→URLの早見表を作る（withIcon が無いパネルでは空）。
+    const iconListEl = panel.querySelector<HTMLScriptElement>('[data-role="icon-list"]');
+    const iconEntries: { key: string; url: string }[] = iconListEl
+      ? JSON.parse(iconListEl.textContent ?? '[]')
+      : [];
+    const iconUrlByKey = new Map(iconEntries.map((e) => [e.key, e.url]));
+    const defaultIconUrl = iconUrlByKey.get('default') ?? '';
+    // キー → 表示URL（未知・空は default）。
+    const iconUrlOf = (key: string): string => iconUrlByKey.get(key) ?? defaultIconUrl;
+    // 編集中データ（全語彙ぶんを1つの配列に持つ。各要素は自分の group を保持）
+    let working: Taxonomy[] = [];
+    // 読み込み時点で DB にあった id の集合（この語彙群ぶんだけ）。削除同期に使う。
+    let savedIds = new Set<string>();
+    // 「最後に保存／読み込んだ時点」のスナップショット（未保存検知の基準）
+    let savedSnap = new Map<string, { content: string; label: string; groupLabel: string }>();
+
+    // ---- セレクタ生成（global index ＝ working の通し番号 ti で一意に指す）----
+    const fieldSel = (ti: number, field: string): string => `[data-ti="${ti}"][data-field="${field}"]`;
+
+    const valOf = (sel: string): string => {
+      const el = container.querySelector<HTMLInputElement | HTMLSelectElement>(sel);
+      return el ? el.value.trim() : '';
+    };
+    const checkedOf = (sel: string): boolean => {
+      const el = container.querySelector<HTMLInputElement>(sel);
+      return el ? el.checked : false;
+    };
+    const setVal = (sel: string, v: string): void => {
+      const el = container.querySelector<HTMLInputElement | HTMLSelectElement>(sel);
+      if (el) el.value = v;
+    };
+    const setChecked = (sel: string, v: boolean): void => {
+      const el = container.querySelector<HTMLInputElement>(sel);
+      if (el) el.checked = v;
+    };
+    
+    // アイコン欄のプレビューを、hidden input の現在値（アイコンキー）から描き直す。
+    // 空文字＝未設定なら iconFor('') が既定アイコンを返す（公開側と同じフォールバック）。
+const refreshIconPreview = (ti: number): void => {
+      const key = valOf(fieldSel(ti, 'icon'));
+      const prev = container.querySelector<HTMLElement>(`[data-ti="${ti}"][data-role="icon-preview"]`);
+      const name = container.querySelector<HTMLElement>(`[data-ti="${ti}"][data-role="icon-name"]`);
+      // プレビューも mask 方式：--icon にURLを入れ、色は CSS の background-color で出す。
+      if (prev) prev.style.setProperty('--icon', `url('${iconUrlOf(key)}')`);
+      if (name) name.textContent = key || '（既定アイコン）'; // 名前はファイル名（空なら既定）
+    };
+    // 比較用の「中身」文字列（キー順固定で安定比較）。表示順は廃止したので含めない。
+    const contentOf = (t: Taxonomy): string =>
+      JSON.stringify({
+        id: t.id,
+        group: t.group,
+        label: t.label,
+        icon: t.icon ?? null,
+        isPublished: t.isPublished,
+      });
+
+    // 今の working を「保存済み」として記録する（読み込み後・保存成功後に呼ぶ＝写真を撮る）
+    const snapshotSaved = (): void => {
+      savedSnap = new Map(
+        working.map((t): [string, { content: string; label: string; groupLabel: string }] => [
+          t.id,
+          { content: contentOf(t), label: t.label, groupLabel: cfgByGroup.get(t.group)?.groupLabel ?? '' },
+        ]),
+      );
+    };
+
+    // 未保存の選択肢ラベル一覧（新規作成／修正／削除）。空配列なら未保存なし＝このパネルのレポーター。
+    const taxUnsavedLabels = (): string[] => {
+      harvest(); // 編集中の値を反映してから比べる
+      const labels: string[] = [];
+      const currentIds = new Set(working.map((t) => t.id));
+      working.forEach((t) => {
+        const gl = cfgByGroup.get(t.group)?.groupLabel ?? '';
+        const snap = savedSnap.get(t.id);
+        if (!snap) labels.push(`【新規作成】${gl}：${t.label || '（無題）'}`);
+        else if (snap.content !== contentOf(t)) labels.push(`【修正】${gl}：${t.label || '（無題）'}`);
+      });
+      savedSnap.forEach((snap, id) => {
+        if (!currentIds.has(id)) labels.push(`【削除】${snap.groupLabel}：${snap.label || id}`);
+      });
+      return labels;
+    };
+
+    // 手動サンプルの欠損補完（group は元の値を保持）
+    const normalizeTaxonomy = (t: Taxonomy): Taxonomy => ({
+      ...t,
+      label: t.label ?? '',
+      isPublished: t.isPublished ?? false,
+    });
+
+    // ---- 画面 → working（編集値の取り込み）----
+    const harvest = (): void => {
+      working.forEach((t, ti) => {
+        // タブUIのとき、非表示タブのカードはDOMに存在しない。
+        // 要素が見つからない場合は working の値をそのまま保持し、上書きしない。
+        const idEl = container.querySelector<HTMLInputElement>(fieldSel(ti, 'id'));
+        if (!idEl) return; // この ti のカードが画面にない → スキップ
+    
+        t.id    = idEl.value.trim();
+        t.label = valOf(fieldSel(ti, 'label'));
+        t.isPublished = checkedOf(fieldSel(ti, 'isPublished'));
+        if (cfgByGroup.get(t.group)?.withIcon) {
+          const icon = valOf(fieldSel(ti, 'icon'));
+          t.icon = icon === '' ? undefined : icon;
+        }
+      });
+    };
+
+    // ---- working → 画面（値の流し込み）----
+    const populate = (): void => {
+      working.forEach((t, ti) => {
+        setVal(fieldSel(ti, 'id'), t.id);
+        setVal(fieldSel(ti, 'label'), t.label);
+        setChecked(fieldSel(ti, 'isPublished'), t.isPublished);
+            if (cfgByGroup.get(t.group)?.withIcon) {
+              setVal(fieldSel(ti, 'icon'), t.icon ?? ''); // hidden に保存値（キー）を流し込む
+              refreshIconPreview(ti); // その値からプレビューSVGと選択名を描き直す
+            }
+          });
+        };
+
+    // ---- 1枚のカードHTML（値は入れず、構造と data-* だけ。ti は working 通し番号）----
+    const taxCard = (_t: Taxonomy, ti: number, cfg: GroupConfig, localNo: number): string => {
+      return `
+      <section class="adm-card">
+        <div class="adm-card__head">
+          <h2>${cfg.groupLabel} ${localNo}</h2>
+          <label class="adm-pub"><input type="checkbox" data-ti="${ti}" data-field="isPublished" /> 公開する</label>
+        </div>
+        <div class="adm-card__body">
+        <div class="adm-row">
+          <label class="adm-field">
+          <span class="adm-field-title">ID</span>
+            
+            <input type="text" data-ti="${ti}" data-field="id"
+              placeholder="${cfg.idPlaceholder ?? ''}"
+              ${cfg.idPrefix ? 'readonly' : ''} />
+            <p>${cfg.idPrefix
+              ? ''
+              : '※英数字とハイフンのみ使用/重複不可'}</p>
+          </label>
+          <label class="adm-field">
+          <span class="adm-field-title">ラベル名</span>
+            <input type="text" data-ti="${ti}" data-field="label" />
+          </label>
+        </div>
+        ${
+          cfg.withIcon
+            ? `
+            <div class="adm-row">
+        <div class="adm-field">
+          <span class="adm-field-title">アイコン（任意）</span>
+          <div class="adm-iconpick">
+            <span class="adm-iconpick__preview" data-ti="${ti}" data-role="icon-preview" aria-hidden="true"></span>
+            <span class="adm-iconpick__name" data-ti="${ti}" data-role="icon-name"></span>
+            <!-- 実際に保存される値（アイコンキー）は hidden で持つ。空文字＝既定アイコン。 -->
+            <input type="hidden" data-ti="${ti}" data-field="icon" />
+            <button type="button" class="adm-btn adm-btn--mini" data-action="pick-icon" data-ti="${ti}">アイコンを選ぶ</button>
+            <button type="button" class="adm-btn adm-btn--mini" data-action="clear-icon" data-ti="${ti}">既定に戻す</button>
+          </div>
+        </div></div>
+        <p class="adm-hint">用意されたアイコンから選択。「既定に戻す」で未設定（既定アイコン）に戻ります。</p>`
+            : ''
+        }
+        
+        <button type="button" class="adm-btn adm-btn--danger" data-action="del-tax" data-ti="${ti}">削除</button>
+        </div>
+      </section>`;
+    };
+
+// 語彙が2つ以上あるときのみ使う「アクティブタブのインデックス」。
+    // render() のたびにタブボタンが再生成されても、どの語彙を表示中か記憶しておく。
+    let activeCfgIndex = 0;
+    
+    // 1語彙ぶんのセクションHTML（カード群）を生成する（タブ有無どちらでも共通）。
+    const buildSection = (cfg: GroupConfig): string => {
+      const rows = working.map((t, ti) => ({ t, ti })).filter((x) => x.t.group === cfg.group);
+      const cards = rows.map((x, i) => taxCard(x.t, x.ti, cfg, i + 1)).join('');
+      const pub = rows.filter((x) => x.t.isPublished).length;
+      const unit = cfg.unitLabel ?? '選択肢';
+      return `
+      <div class="adm-taxgroup" data-group="${cfg.group}">
+          <div class="adm-taxgroup__head">
+            <h3 class="adm-taxgroup__title">${cfg.groupLabel}</h3>
+            <span class="adm-count">公開 ${pub} / 全 ${rows.length}</span>
+            <button type="button" class="adm-btn adm-btn--primary" data-action="add-tax" data-group="${cfg.group}">＋ 新規${unit}を追加</button>
+          </div>
+          <div class="adm-taxgroup__body">${cards || '<p class="adm-hint">まだありません。「＋ 新規…を追加」から作成してください。</p>'}</div>
+        </div>`;
+    };
+    
+    const buildHtml = (): string => {
+      // 語彙が1つだけ → 従来どおり縦並び（news-tax・report-tax はここを通る）
+      if (groupCfgs.length <= 1) {
+        return groupCfgs.map((cfg) => buildSection(cfg)).join('');
+      }
+      // 語彙が2つ以上 → ボタン型タブで切り替え表示（plan-tax はここを通る）
+      const tabs = groupCfgs
+        .map((cfg, i) => {
+          const rows = working.filter((t) => t.group === cfg.group);
+          const pub = rows.filter((t) => t.isPublished).length;
+          // data-cfg-index でどの語彙のタブかを識別。アクティブは is-active クラスで判定。
+          return `<button type="button" class="adm-innertab${i === activeCfgIndex ? ' is-active' : ''}"
+            data-action="switch-tab" data-cfg-index="${i}">
+            ${cfg.groupLabel}
+            <span class="adm-count">公開${pub}/${rows.length}</span>
+          </button>`;
+        })
+        .join('');
+      // アクティブなインデックスの語彙だけセクションを描く
+      const activeSection = buildSection(groupCfgs[activeCfgIndex]);
+      return `<div class="adm-innertab-bar">${tabs}</div>${activeSection}`;
+    };
+    
+    const render = (): void => {
+      container.innerHTML = buildHtml();
+      populate();
+      if (countEl) countEl.textContent = countLabel(working);
+    };
+
+    const setStatus = (msg: string, kind: 'ok' | 'warn' | ''): void => {
+      statusEl.textContent = msg;
+      statusEl.className = 'adm-status' + (kind ? ' is-' + kind : '');
+    };
+
+    // 連番採番ヘルパー: cfg に idPrefix がある場合、working の中の最大番号+1 を返す
+    const nextTaxId = (cfg: GroupConfig): string => {
+      const prefix = cfg.idPrefix;
+      if (!prefix) return ''; // idPrefix 未設定なら空欄（従来どおり手入力）
+      const nums = working
+        .filter(t => t.id.startsWith(prefix))          // 同じ接頭辞のIDだけ
+        .map(t => parseInt(t.id.slice(prefix.length), 10)) // 接頭辞以降を数値化
+        .filter(n => !isNaN(n));                        // 数値でないもの（手入力の旧ID等）は除外
+      const max = nums.length > 0 ? Math.max(...nums) : 0;
+      return prefix + String(max + 1).padStart(3, '0'); // 3桁ゼロ埋め（例: ft-001）
+    };
+    
+    
+    // 新規のひな型（cfg を受け取り、idPrefix があれば自動採番する）
+    const blankTaxonomy = (cfg: GroupConfig): Taxonomy => ({
+      id: nextTaxId(cfg),
+      group: cfg.group,
+      label: '',
+      isPublished: false,
+    });
+
+    // 保存前の簡易チェック（パネル内の全語彙をまたいで id 重複を見る）
+    const validate = (): string[] => {
+      const errs: string[] = [];
+      const seen = new Set<string>();
+      working.forEach((t, i) => {
+        const n = i + 1;
+        if (t.id === '') errs.push(`${n}件目: ID が空です`);
+        else if (seen.has(t.id)) errs.push(`${n}件目: ID「${t.id}」が重複しています`);
+        seen.add(t.id);
+        if (t.label === '') errs.push(`${n}件目: ラベルが空です`);
+      });
+      return errs;
+      };
+      
+      // ---- アイコンピッカー（withIcon の語彙があるパネルにだけ存在）----
+      // モーダル本体は editor の外（renderで消えない）。グリッドは選択肢が固定なので1回だけ組み立てる。
+      const iconPicker = panel.querySelector<HTMLElement>('[data-role="icon-picker"]');
+      const iconGrid = panel.querySelector<HTMLElement>('[data-role="icon-grid"]');
+      let iconTargetTi = -1; // いまピッカーで編集している選択肢の通し番号
+      
+    if (iconGrid) {
+      // default は「既定に戻す」で扱うのでグリッドからは除外する。
+      iconGrid.innerHTML = iconEntries
+        .filter((e) => e.key !== 'default')
+        .map(
+          (e) => `
+        <button type="button" class="adm-picker__item" data-pick-icon="${e.key}">
+          <span class="adm-icon-mask" style="--icon: url('${e.url}')"></span>
+          <span class="adm-picker__name">${e.key}</span>
+        </button>`,
+        )
+        .join('');
+    }
+      
+      const openIconPicker = (ti: number): void => {
+        if (iconPicker) {
+          iconTargetTi = ti;
+          iconPicker.hidden = false;
+        }
+      };
+      const closeIconPicker = (): void => {
+        if (iconPicker) {
+          iconPicker.hidden = true;
+          iconTargetTi = -1;
+        }
+      };
+      
+      // グリッドのアイコンを選んだら、対象の hidden にキーを入れてプレビュー更新→閉じる。
+      if (iconGrid) {
+        iconGrid.addEventListener('click', (ev) => {
+          const el = ev.target;
+          if (!(el instanceof Element)) return;
+          const item = el.closest<HTMLButtonElement>('button[data-pick-icon]');
+          if (!item || iconTargetTi < 0) return;
+          setVal(fieldSel(iconTargetTi, 'icon'), item.dataset.pickIcon ?? '');
+          refreshIconPreview(iconTargetTi);
+          closeIconPicker();
+        });
+      }
+      // 「閉じる」または背景クリックでモーダルを閉じる。
+      if (iconPicker) {
+        iconPicker.addEventListener('click', (ev) => {
+          const el = ev.target;
+          if (el instanceof Element && el.closest('[data-picker-close]')) closeIconPicker();
+        });
+      }
+      
+      // ---- イベント（追加・削除はイベント委譲でまとめて受ける）----
+      container.addEventListener('click', (ev) => {
+      const el = ev.target;
+      if (!(el instanceof Element)) return;
+      const btn = el.closest<HTMLButtonElement>('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action ?? '';
+      
+      // アイコン操作は構造変更ではないので harvest 不要・ここで完了して return。
+      if (action === 'pick-icon') {
+        const ti = btn.dataset.ti !== undefined ? Number(btn.dataset.ti) : -1;
+        if (ti >= 0) openIconPicker(ti);
+        return;
+      }
+      if (action === 'clear-icon') {
+        const ti = btn.dataset.ti !== undefined ? Number(btn.dataset.ti) : -1;
+        if (ti >= 0) {
+          setVal(fieldSel(ti, 'icon'), ''); // 空文字＝既定アイコンに戻す
+          refreshIconPreview(ti);
+        }
+        return;
+      }
+      
+      // タブ切り替え：harvest してアクティブインデックスを更新し、再描画するだけ。
+      // 保存や未保存検知には影響しない（working は変えない）。
+      if (action === 'switch-tab') {
+        harvest(); // タブを切り替える前に今の入力値を保存しておく
+        const idx = btn.dataset.cfgIndex !== undefined ? Number(btn.dataset.cfgIndex) : 0;
+        activeCfgIndex = idx;
+        render();
+        return; // 以降の処理は不要
+      }
+      harvest(); // 構造変更の前に編集値を取り込む
+      if (action === 'add-tax') {
+      const g = (btn.dataset.group ?? '') as TaxonomyGroup;
+      // g に対応する GroupConfig を groups 配列から探す（idPrefix を blankTaxonomy に渡すため）
+      // groupCfgs は JSON島から読み込んだ設定配列（script 内での変数名）
+      const cfg = groupCfgs.find((c: GroupConfig) => c.group === g);
+      if (cfg) {
+        working.push(blankTaxonomy(cfg));
+          render();
+          setStatus('新しい選択肢を追加しました。下に入力してください。', 'ok');
+          return;
+        }
+      } else if (action === 'del-tax') {
+        const ti = btn.dataset.ti !== undefined ? Number(btn.dataset.ti) : -1;
+        if (ti >= 0 && window.confirm('この選択肢を削除します。よろしいですか？')) working.splice(ti, 1);
+      }
+      render();
+      setStatus('', '');
+    });
+
+    // 保存（全語彙まとめて：削除同期 → 保存 → 基準更新）
+    exportBtn.addEventListener('click', async () => {
+      harvest();
+      const errs = validate();
+      if (errs.length > 0) {
+        setStatus('確認ポイントがあります（このまま保存することも可能）', 'warn');
+        const ok = window.confirm('入力に確認ポイントがあります。それでも保存しますか？\n\n' + errs.join('\n'));
+        if (!ok) return;
+      }
+
+      // 削除同期：読み込み時にあった id（この語彙群ぶん）のうち、今 working に無いものを削除。
+      // savedIds は load() で groupSet 絞り込み済みなので、他語彙のデータは絶対に対象に入らない。
+      const currentIds = new Set(working.map((t) => t.id));
+      const toDelete = [...savedIds].filter((id) => !currentIds.has(id));
+      if (toDelete.length > 0) {
+        const ok = window.confirm(
+          `${toDelete.length}件の選択肢を削除します（元に戻せません）。\n${toDelete.join('\n')}\n\n保存を続けますか？`,
+        );
+        if (!ok) return;
+      }
+
+      exportBtn.disabled = true;
+      const prevLabel = exportBtn.textContent;
+      exportBtn.textContent = '保存中…';
+      try {
+        for (const id of toDelete) await deleteTaxonomyFromDb(id); // 1) 消えた分を削除
+        for (const t of working) await saveTaxonomyToDb(t); // 2) 残り全件を保存（作成 or 上書き）
+        savedIds = new Set(working.map((t) => t.id)); // 3) 基準を更新（次回の削除同期用）
+        snapshotSaved(); // 保存成功＝新しい基準の写真を撮り直す
+        setStatus(`保存しました（更新 ${working.length}件 / 削除 ${toDelete.length}件）`, 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus('保存に失敗しました。通信状態やログイン状態を確認してください。', 'warn');
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = prevLabel;
+      }
+    });
+
+    // ---- Firestore からの読み込み（ログイン確定後だけ呼ぶ）----
+    const load = async (): Promise<void> => {
+      working = (await getTaxonomiesFromDb()).filter((t) => groupSet.has(t.group)).map(normalizeTaxonomy);
+      savedIds = new Set(working.map((t) => t.id)); // 読み込み時点の id を記録
+      snapshotSaved(); // 読み込み直後＝未保存なしの基準
+      render();
+    };
+
+    // tabKey があるときだけ未保存レポーターを登録（従来タブの単一語彙では登録しない）。
+    if (tabKey) {
+      const w = window as unknown as { adminDirtyReporters?: Record<string, () => string[]> };
+      w.adminDirtyReporters = w.adminDirtyReporters ?? {};
+      w.adminDirtyReporters[tabKey] = taxUnsavedLabels;
+      // ページ離脱（閉じる・再読み込み）時、未保存があればブラウザ標準の警告を出す。
+      window.addEventListener('beforeunload', (e) => {
+        if (taxUnsavedLabels().length === 0) return;
+        e.preventDefault();
+      });
+    }
+
+    // ルールが auth != null のため、認証前に読むと permission-denied になる。
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        void load(); // void = 戻り値の Promise を意図的に捨てる（型チェック対策）
+      } else {
+        working = [];
+        savedSnap = new Map(); // ログアウト時は基準（写真）もクリア
+        render();
+      }
+    });
+  };
+
+  // ページ上の全 taxonomy パネルを列挙し、それぞれ独立に初期化する。
+  document.querySelectorAll<HTMLElement>('.js-tax-panel').forEach((p) => initPanel(p));
+</script>

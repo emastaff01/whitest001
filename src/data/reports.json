@@ -1,0 +1,68 @@
+[
+  {
+    "id": "report-sample-02",
+    "title": "1棟まるごと貸切で過ごした、おふたりらしい時間",
+    "coupleName": "T & M",
+    "weddingDate": "2026-06-28",
+    "guestCount": 60,
+    "body": "邸宅を1棟まるごと貸切に。ガーデンでのウェルカムパーティーから披露宴まで、終始リラックスした雰囲気で進行しました。",
+    "thumbnail": {
+      "src": "/images/reports/sample-report-02.jpg",
+      "alt": "ガーデンウェディングの様子"
+    },
+    "gallery": [
+      {
+        "src": "/images/reports/sample-report-02-01.jpg",
+        "alt": "チャペルでの風景"
+      },
+      {
+        "src": "/images/reports/sample-report-02-02.jpg",
+        "alt": "楽しく快談する御両家"
+      },
+      {
+        "src": "/images/reports/sample-report-02-03.jpg",
+        "alt": "サプライズは大成功"
+      }
+    ],
+    "tagIds": [
+      "rt-private",
+      "rt-garden"
+    ],
+    "isPublished": true,
+    "publishedAt": "2026-07-03",
+    "sortOrder": 2
+  },
+  {
+    "id": "reports3",
+    "title": "テスト",
+    "body": "テスト",
+    "thumbnail": {
+      "src": "/images/reports/sample-report-02.jpg",
+      "alt": "テストサムネイル"
+    },
+    "isPublished": true,
+    "coupleName": "U&B",
+    "weddingDate": "2026-09-15",
+    "guestCount": 100,
+    "gallery": [
+      {
+        "src": "/images/reports/sample-report-02-01.jpg",
+        "alt": "チャペルでの風景"
+      },
+      {
+        "src": "/images/reports/sample-report-02-02.jpg",
+        "alt": "楽しく快談する御両家"
+      },
+      {
+        "src": "/images/reports/sample-report-02-03.jpg",
+        "alt": "サプライズは大成功"
+      }
+    ],
+    "tagIds": [
+      "rt-small",
+      "rt-garden-ceremony"
+    ],
+    "publishedAt": "2026-06-09",
+    "sortOrder": 1
+  }
+]

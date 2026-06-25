@@ -1,0 +1,71 @@
+---
+// =============================================================
+// ConceptSection.astro  （TOPページ / CONCEPTセクション）
+// -------------------------------------------------------------
+// ・1棟1組完全貸切のUSP（独自の強み）を明確に伝えるメインセクション。
+// ・SEO/LLMO観点でも「佐賀県初」「1棟1組」「完全貸切」「ガラス張りチャペル」
+//   などのキーワードを自然に含む。
+// ・/concept/ ページ（後セッションで実装）への導線も持たせる。
+// ・文言は仮。上司・クライアント確認後に差し替えてください。
+// =============================================================
+
+
+// ---- 本文（仮・編集可）----
+const headline = '邸宅をひとつ、おふたりだけで';
+const bodyParagraphs = [
+  '佐賀県初となる、1棟1組完全貸切のゲストハウス。',
+  '光が満ちるガラス張りのチャペル、水と緑に包まれる中庭、開放感のある披露宴会場<br>邸宅のすべてを、おふたりとゲストだけのためにご用意します。',
+  '外からの視線にも、流れる時間にも邪魔されず、<br>おふたりだけのために静かに開かれる一日を。',
+];
+---
+
+<section class="concept" aria-labelledby="concept-heading">
+  <div class="concept__inner">
+    <p class="concept__overline">CONCEPT</p>
+    <h2 id="concept-heading" class="concept__headline">{headline}</h2>
+    <div class="concept__body">
+      {/* bodyParagraphsの文字列に <br /> 等のHTMLを書きたいので set:html
+          外部入力（DB・フォーム等）から渡す場合は別途サニタイズが必要。 */}
+      {bodyParagraphs.map((p) => <p set:html={p} />)}
+    </div>
+  </div>
+</section>
+
+<style>
+  .concept {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .concept__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    text-align: center;
+  }
+  .concept__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 28px;
+  }
+  .concept__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 48px;
+  }
+  .concept__body {
+    font-family: var(--font-jp-sans);
+    font-weight: var(--weight-regular);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+  .concept__body p + p {
+    margin-top: 1.6em;
+  }
+</style>

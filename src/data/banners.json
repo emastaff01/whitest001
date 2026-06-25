@@ -1,0 +1,72 @@
+[
+  {
+    "id": "banner-01",
+    "image": {
+      "src": "/images/banners/bnr_disney.jpg",
+      "alt": "ブライダルフェア開催中"
+    },
+    "href": "https://tiara-boutique.net/dress-collection/",
+    "isPublished": true,
+    "sortOrder": 1
+  },
+  {
+    "id": "banner-02",
+    "image": {
+      "src": "/images/banners/bnr_monitor.jpg",
+      "alt": "モニター婚カップル募集中"
+    },
+    "href": "https://lp1.wedding-campaign.jp/whi-monitor-paper02/",
+    "isPublished": true,
+    "sortOrder": 2
+  },
+  {
+    "id": "banner-03",
+    "image": {
+      "src": "/images/banners/bnr_line.jpg",
+      "alt": "公式LINEでフェア予約や事前相談もできる！"
+    },
+    "href": "https://lin.ee/08A0DYB",
+    "isPublished": true,
+    "sortOrder": 3
+  },
+  {
+    "id": "banner-04",
+    "image": {
+      "src": "/images/banners/bnr_disney.jpg",
+      "alt": "ブライダルフェア開催中"
+    },
+    "href": "https://tiara-boutique.net/dress-collection/",
+    "isPublished": true,
+    "sortOrder": 4
+  },
+  {
+    "id": "banner-05",
+    "image": {
+      "src": "/images/banners/bnr_monitor.jpg",
+      "alt": "モニター婚カップル募集中"
+    },
+    "href": "https://lp1.wedding-campaign.jp/whi-monitor-paper02/",
+    "isPublished": true,
+    "sortOrder": 5
+  },
+  {
+    "id": "banner-06",
+    "image": {
+      "src": "/images/banners/bnr_line.jpg",
+      "alt": "公式LINEでフェア予約や事前相談もできる！"
+    },
+    "href": "https://lin.ee/08A0DYB",
+    "isPublished": true,
+    "sortOrder": 6
+  },
+  {
+    "id": "banner-07",
+    "image": {
+      "src": "/images/banners/bnr_monitor.jpg",
+      "alt": "モニター婚カップル募集中"
+    },
+    "href": "https://lp1.wedding-campaign.jp/whi-monitor-paper02/",
+    "isPublished": true,
+    "sortOrder": 7
+  }
+]

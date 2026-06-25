@@ -1,0 +1,126 @@
+---
+// =============================================================
+// FairSection.astro  （TOPページ / FAIRセクション）
+// -------------------------------------------------------------
+// ・getFairs() でブライダルフェア一覧を取得し、共通の FairCard で表示。
+// ・カード本体は ../fair/FairCard.astro に切り出しているので、
+//   /fair/ 一覧ページとデザインが完全に揃う。
+// =============================================================
+
+import { getFairs } from '../../lib/getFairs';
+import { url } from '../../lib/url';
+import FairCard from '../fair/FairCard.astro';
+
+interface Props {
+  compact?: boolean; // true で各カードを簡易表示。既定 false ＝TOP従来表示
+}
+const { compact = false } = Astro.props; // 渡されなければ false（＝TOPは無改修）
+
+const fairs = getFairs();
+// ---- セクション見出し（仮・編集可）----
+const overline = 'FAIR'; // overline も変えたい場合は同じ要領で compact ? ... : ... にする
+const headline = compact
+  ? 'ブライダルフェア開催中'              // ← 簡易表示用。お好みの文言に変更してください
+  : 'ブライダルフェア';
+const intro = compact
+  ? '見学・試食・相談ができるフェアを随時開催しています。' // ← 簡易表示用。お好みの文言に変更してください
+  : '見学・試食・相談ができるフェアを開催中。お気軽にお越しください。';
+---
+
+<section class="fair" aria-labelledby="fair-heading">
+  <div class="fair__inner">
+    <header class="fair__header">
+      <p class="fair__overline">{overline}</p>
+      <h2 id="fair-heading" class="fair__headline">{headline}</h2>
+      <p class="fair__intro">{intro}</p>
+    </header>
+
+    <div class:list={['fair__grid', { 'fair__grid--compact': compact }]}>
+      {fairs.map((fair) => <FairCard fair={fair} compact={compact} />)}
+    </div>
+
+    <p class="fair__more">
+      <a href={url('/fair/')}>フェア一覧へ</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .fair {
+    background-color: var(--off-white);
+    padding-block: var(--space-section-y);
+  }
+  .fair__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .fair__header {
+    text-align: center;
+    margin-bottom: clamp(48px, 6vw, 72px);
+  }
+  .fair__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .fair__headline {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 20px;
+  }
+  .fair__intro {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.88rem, 1.5vw, 0.95rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+  }
+
+  .fair__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(32px, 4vw, 48px);
+  }
+
+  .fair__more {
+    margin-top: clamp(48px, 6vw, 72px);
+    text-align: center;
+  }
+  .fair__more a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .fair__more a::after {
+    content: '  →';
+    color: var(--green);
+  }
+  .fair__more a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+  .fair__more a:hover::after {
+    color: var(--charcoal);
+  }
+@media (min-width: 769px) {
+    .fair__grid--compact {
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(20px, 2.5vw, 32px);
+    }
+  }
+  @media (max-width: 768px) {
+    .fair__grid {
+      grid-template-columns: 1fr;
+      gap: 56px;
+    }
+  }
+</style>

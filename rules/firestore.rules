@@ -1,0 +1,71 @@
+rules_version = '2';
+
+// =============================================================
+// firestore.rules （暫定・本番フェーズ用）
+// -------------------------------------------------------------
+// 【重要】テストサイト段階では Firestore に接続しないため、
+// このファイルは現時点では使用されません（予約・たたき台です）。
+// 本番化フェーズで Firebase 権限が入った後に、内容を見直して適用します。
+//
+// 方針:
+//   - 公開コレクション（fairs / plans / reports / styles / posts /
+//     site_settings）は「誰でも読める／書き込みはログイン管理者のみ」
+//   - 送信データ（fair_reservations / plan_inquiries / contact_requests）は
+//     「誰でも作成できる（フォーム送信）／読めるのは管理者のみ」
+// =============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ログイン済み管理者かどうかを判定する関数（後で本実装する）
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // --- 公開コレクション：読み取りは全員OK、書き込みは管理者のみ ---
+    match /site_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /fairs/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /plans/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /reports/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /posts/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /taxonomies/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /siteSettings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- 送信データ：作成は全員OK（フォーム送信）、読取/更新/削除は管理者のみ ---
+    match /fair_reservations/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+    match /plan_inquiries/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+   match /contact_requests/{docId} {
+         allow create: if true;
+         allow read, update, delete: if isAdmin();
+       }
+       // 上記以外のパスは全部拒否（明示）
+       match /{document=**} { allow read, write: if false; }
+     }
+   }

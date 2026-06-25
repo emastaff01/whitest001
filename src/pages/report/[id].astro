@@ -1,0 +1,331 @@
+---
+// =============================================================
+// src/pages/report/[id].astro （ウェディングレポート詳細ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/report/[id]/  （例: /report/report-sample-01/）
+// ・Astroの動的ルート。getStaticPaths() で全レポートのIDから静的生成。
+// ・予約動線や価格は持たない「読み物・ギャラリー」型のページ。
+//   メイン画像＋本文＋（あれば）写真ギャラリー＋最終CTA。
+// ・style/[id].astro と同じ骨組み。
+// =============================================================
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getReports } from '../../lib/getReports';
+import { getSiteSettings } from '../../lib/getSiteSettings'; // 発行元(式場名)取得のため追加
+import { url } from '../../lib/url';
+import type { Report } from '../../types';
+// タグの id→ラベル変換に使う早見表（公開側は taxonomies.json を読む）
+import { getTaxonomyMap } from '../../lib/getTaxonomies';
+
+// ---- 動的ルートのパス生成 ----
+// 公開中の全レポートIDを列挙 → /report/report-sample-01/ などが自動生成される。
+export async function getStaticPaths() {
+  const reports = getReports();
+  return reports.map((report) => ({
+    params: { id: report.id }, // URLの [id] 部分になる
+    props: { report },         // そのページに丸ごと中身を渡す（再取得不要）
+  }));
+}
+
+interface Props {
+  report: Report;
+}
+const { report } = Astro.props;
+
+// レポートのタグ：id → ラベルに変換（マスターに無い／非公開の id は除外）
+const reportTagMap = getTaxonomyMap('report-tags');
+const tagLabels = (report.tagIds ?? [])
+  .map((id) => reportTagMap.get(id)?.label) // Taxonomy から label を取り出す（無ければ undefined）
+  .filter((label): label is string => Boolean(label)); // undefined を除いて string[] に確定
+
+// 画像パス（base 付き）。他ページと同じ作り方。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
+
+// 'YYYY-MM-DD' → 'YYYY.MM.DD'（無ければ空文字）
+const toDisplayDate = (iso?: string) => (iso ? iso.replaceAll('-', '.') : '');
+
+const heroJpg = toAssetPath(report.thumbnail.src);
+const heroWebp = toWebpPath(report.thumbnail.src);
+
+// ギャラリー画像（任意）。無い／空配列なら下で表示しない。
+const gallery = report.gallery ?? [];
+
+// ---- 構造化データ（Schema.org Article）用の値 ----
+// 検索エンジンに「これは結婚式のレポート記事」と機械可読で伝えるデータ。画面の見た目には影響しない。
+const settings = getSiteSettings(); // 発行元・書き手として使う式場名を取得
+
+// JSON-LD には絶対URL(https://〜)が必要。fair/[id].astro と同じ作り方で SITE_URL を用意する。
+// origin（ホスト）だけを正にする。パス(/test-whi)は base 側で管理する
+const SITE_URL =
+  import.meta.env.PUBLIC_SITE_URL ??
+  'https://ema-run-665477084949.asia-northeast1.run.app';
+
+// 代表画像の絶対URL。heroJpg は "/test-whi/..." の形なので、SITE_URL と結合して https 化する。
+  const absoluteImageUrl = new URL(heroJpg, SITE_URL).href;
+  
+  // 代表画像＋ギャラリー画像を、すべて絶対URLの配列にまとめる。
+  // gallery が空なら「代表画像1枚だけの配列」になるので、従来と実質同じ動き（後方互換）。
+  const ldImages = [
+    absoluteImageUrl,
+    ...gallery.map((image) => new URL(toAssetPath(image.src), SITE_URL).href),
+  ];
+
+// このレポートページ自身の絶対URL。url() で base 付きパスを作り、SITE_URL と結合する。
+const pageUrl = new URL(url(`/report/${report.id}/`), SITE_URL).href;
+
+// 概要文：本文の先頭120文字。改行や記号は JSON.stringify が自動でエスケープしてくれる。
+const ldDescription = report.body.slice(0, 120);
+// サイトのトップページの絶対URL。author/publisher の url（＝著者・発行元を特定するページ）に使う。
+// 絶対URLを作る用途なので、画像URL(ldImages)と同じく base から組み立てる（url() は主に画面内リンク用）。
+// base はこのファイル上部で定義済みの '/test-whi'。本番化時は SITE_URL 側が本番ドメインに差し替わる。
+const homeUrl = new URL(`${base}/`, SITE_URL).href;
+
+// 発行元ロゴの絶対URL。site-settings.json の logo（任意）がある時だけ作る。
+// 作り方は上の ldImages と同じ（toAssetPath で base を付けてから SITE_URL と結合）。
+const absoluteLogoUrl = settings.logo
+  ? new URL(toAssetPath(settings.logo), SITE_URL).href
+  : undefined;
+
+// 発行元（式場）の情報。logo は任意なので、ロゴがある時だけ後から足す。
+// articleLd と同じく Record<string, unknown>（文字列キー＋中身は何でも）にしておく。
+const publisher: Record<string, unknown> = {
+  '@type': 'Organization',
+  name: settings.siteName,
+  url: homeUrl,
+};
+if (absoluteLogoUrl) {
+  // ロゴは ImageObject（url を持つ画像オブジェクト）で出すのが Google 推奨の書き方。
+  publisher.logo = { '@type': 'ImageObject', url: absoluteLogoUrl };
+}
+// Article 本体（オブジェクト＝キーと値の集まり）。
+// 動的にキーを足すので、型は Record<string, unknown>(文字列キー＋中身は何でも)としておく。
+const articleLd: Record<string, unknown> = {
+  '@context': 'https://schema.org', // schema.org の語彙を使う宣言（定型）
+  '@type': 'Article',               // 種類は「記事」
+  headline: report.title,           // 記事見出し
+  image: ldImages,                  // 代表画像＋ギャラリー（絶対URLの配列）
+  description: ldDescription,       // 概要
+  mainEntityOfPage: {               // この構造化データが指すページ
+    '@type': 'WebPage',
+    '@id': pageUrl,
+  },
+  author: {
+    '@type': 'Organization',
+    name: settings.siteName,
+    url: homeUrl, // 著者(式場)を特定するページ＝トップページのURL
+  },
+  publisher, // 上で組み立てた発行元情報（ロゴがあれば logo 付き）を入れる
+};
+
+// 'YYYY-MM-DD'（日付だけ）を ISO 8601 の日時＋日本時間(+09:00)に変換する。
+// 例: '2026-06-20' → '2026-06-20T00:00:00+09:00'
+// すでに 'T'（日付と時刻の区切り）を含む値はそのまま返す（将来データが時刻付きでも壊れない）。
+const toJstDateTime = (date: string): string =>
+  date.includes('T') ? date : `${date}T00:00:00+09:00`;
+
+// publishedAt がある時だけ公開日・更新日を足す（無ければキー自体を出さない＝任意項目の扱い）
+if (report.publishedAt) {
+  const published = toJstDateTime(report.publishedAt); // 日時＋タイムゾーン付きに整形
+  articleLd.datePublished = published;
+  articleLd.dateModified = published;
+}
+---
+
+<BaseLayout
+  title={`${report.title}｜ウェディングレポート｜ホワイトハウス伊万里`}
+  description={report.body.slice(0, 100)}
+  ogImage={report.thumbnail.src}
+  >
+    {/* 構造化データ(Article)。検索エンジン向けの説明で、画面には表示されない */}
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(articleLd)} />
+  
+    <article class="report-detail">
+    {/* ヒーロー画像（メイン1枚） */}
+    <div class="report-detail__hero">
+      <picture>
+        <source type="image/webp" srcset={heroWebp} />
+        <img
+          src={heroJpg}
+          alt={report.thumbnail.alt}
+          width="2000"
+          height="1333"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </picture>
+    </div>
+
+    <div class="report-detail__inner">
+      {/* タイトル＆メタ情報（任意項目はある時だけ表示） */}
+      <header class="report-detail__header">
+        <p class="report-detail__overline">REPORT</p>
+        <h1 class="report-detail__title">{report.title}</h1>
+        <p class="report-detail__meta">
+          {report.weddingDate && (
+            <span class="report-detail__date">{toDisplayDate(report.weddingDate)}</span>
+          )}
+          {report.coupleName && (
+            <span class="report-detail__couple">{report.coupleName}様</span>
+          )}
+          {report.guestCount && (
+            <span class="report-detail__guests">ゲスト {report.guestCount}名</span>
+          )}
+        </p>
+        {tagLabels.length > 0 && (
+          <p class="report-detail__tags">
+            {tagLabels.map((label) => `#${label}`).join('  ')}
+          </p>
+        )}
+      </header>
+
+      {/* 本文。改行を活かすため CSS で white-space: pre-line を指定 */}
+      <div class="report-detail__body">
+        <p>{report.body}</p>
+      </div>
+
+      {/* 写真ギャラリー：gallery に画像がある時だけ表示（今のサンプルは空なので非表示） */}
+      {
+        gallery.length > 0 && (
+          <section class="report-detail__gallery">
+            {gallery.map((image) => (
+              <picture>
+                <source type="image/webp" srcset={toWebpPath(image.src)} />
+                <img
+                  src={toAssetPath(image.src)}
+                  alt={image.alt}
+                  width="1200"
+                  height="800"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+            ))}
+          </section>
+        )
+      }
+
+      {/* 一覧に戻る導線 */}
+      <p class="report-detail__back">
+        <a href={url('/report/')}>← レポート一覧を見る</a>
+      </p>
+    </div>
+  </article>
+
+  {/* 最終CTA（他ページと共通） */}
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .report-detail {
+    background-color: var(--white);
+  }
+  .report-detail__hero {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-top: clamp(40px, 5vw, 64px);
+  }
+  .report-detail__hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .report-detail__inner {
+    max-width: var(--maxw-narrow);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+    padding-block: clamp(48px, 6vw, 80px);
+  }
+  .report-detail__header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .report-detail__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    margin-bottom: 24px;
+  }
+  .report-detail__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    line-height: 1.5;
+    color: var(--charcoal);
+    margin-bottom: 20px;
+  }
+  .report-detail__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 16px;
+    align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .report-detail__date {
+    font-family: var(--font-en-display);
+    font-size: 1.1rem;
+    color: var(--charcoal);
+    letter-spacing: 0.02em;
+  }
+  .report-detail__couple {
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--green);
+  }
+  .report-detail__guests {
+    font-family: var(--font-jp-sans);
+    font-size: 0.78rem;
+    color: var(--gray);
+  }
+  .report-detail__tags {
+    font-family: var(--font-jp-sans);
+    font-size: 0.78rem;
+    color: var(--gray);
+  }
+  .report-detail__body {
+    font-family: var(--font-jp-sans);
+    font-size: clamp(0.92rem, 1.6vw, 1rem);
+    line-height: var(--lh-body);
+    color: var(--dark-gray);
+    white-space: pre-line;
+  }
+  .report-detail__gallery {
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(16px, 2vw, 24px);
+  }
+  .report-detail__gallery img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  @media (max-width: 600px) {
+    .report-detail__gallery {
+      grid-template-columns: 1fr;
+    }
+  }
+  .report-detail__back {
+    margin-top: 64px;
+    text-align: center;
+  }
+  .report-detail__back a {
+    font-family: var(--font-jp-sans);
+    font-size: 0.88rem;
+    color: var(--green);
+    border-bottom: 0.5px solid var(--hairline-green);
+    padding-bottom: 4px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .report-detail__back a:hover {
+    color: var(--charcoal);
+    border-bottom-color: var(--charcoal);
+  }
+</style>

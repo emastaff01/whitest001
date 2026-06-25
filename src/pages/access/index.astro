@@ -1,0 +1,55 @@
+---
+// =============================================================
+// src/pages/access/index.astro （アクセスページ）
+// -------------------------------------------------------------
+// URL: /test-whi/access/
+// ・施設ページ(chapel/banquet/cuisine)と同じ枠組み。
+//   PageHeader ＋ ヒーロー画像 ＋ TOPのACCESSセクション(再利用) ＋ FairSection ＋ CtaSection。
+// ・住所・電話・地図の「中身」は components/home/AccessSection.astro を再利用
+//   （TOPと同じ部品＝1か所管理。site-settings.json から取得）。マークアップは複製しない。
+// ・AccessSection の見出しと自己リンクは、このページでは不要なので props で隠す。
+// ・ヒーロー画像は public/images/access/ に jpg＋webp のペアで配置すること。
+// =============================================================
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import AccessSection from '../../components/home/AccessSection.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import '../../styles/facility.css';
+
+// 画像パス用ヘルパー（chapel と同じ方式。base=/test-whi を先頭に付ける）
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const asset = (p: string) => `${BASE}/${p.replace(/^\/+/, '')}`;
+const webp = (p: string) => asset(p).replace(/\.jpg$/i, '.webp');
+---
+<BaseLayout
+  title="アクセス｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里へのアクセス。JR伊万里駅から徒歩10分。住所・電話・地図でご案内します。"
+>
+  <PageHeader
+    overline="ACCESS"
+    title="アクセス"
+    description="伊万里駅から徒歩10分。水と緑に囲まれた邸宅へ。"
+  />
+
+  <section class="facility">
+    <div class="facility__inner">
+      {/* ヒーロー画像。最初に見えるので loading は eager */}
+      <div class="facility__hero">
+        <picture>
+          <source type="image/webp" srcset={webp('/images/access/accessTOP.jpg')} />
+          <img
+            src={asset('/images/access/accessTOP.jpg')}
+            alt="ホワイトハウス伊万里の外観"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
+      </div>
+    </div>
+  </section>
+
+  {/* TOPと同じACCESSセクションを再利用。見出し・自己リンクは隠す */}
+  <AccessSection showHeader={false} showDetailLink={false} />
+
+  <CtaSection />
+</BaseLayout>

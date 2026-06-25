@@ -1,0 +1,146 @@
+---
+// =============================================================
+// Hero.astro （TOPページ ファーストビュー / 背景動画）
+// -------------------------------------------------------------
+// 仕様（クライアント要望）:
+//   ・静止画スライダーをやめ、30秒のループ動画を背景にする。
+//   ・自動再生 / ミュート / 無限ループ。
+//   ・スマホでも自動再生させるため playsinline（インライン再生）必須。
+//     ※iOS等は「muted かつ playsinline」でないと自動再生されない仕様のため。
+//   ・動画が読めない/再生前は poster 画像を表示（フォールバック）。
+//   ・キャッチコピーの帯（hero__content）は従来どおり動画の上に重ねる。
+//
+// 動画ファイル: public/videos/heromovie.mp4
+//   public/ 配下は base（/test-whi）を付けて参照する（リンク切れ防止）。
+// =============================================================
+
+// public/ 配下の参照は base（/test-whi）を先頭に付ける。
+// base は末尾スラッシュ有無が環境で変わるため、いったん末尾スラッシュを
+// 取り除いてから「/videos/...」「/images/...」を足して確実に整える。
+const base = import.meta.env.BASE_URL.replace(/\/$/, ''); // 例: '/test-whi'
+const videoSrc = `${base}/videos/heromovie.mp4`;
+// 動画の読み込み前・再生不可時に出す代替画像（既存のヒーロー画像を流用）。
+const poster = `${base}/images/hero/hero-1-chapel.jpg`;
+
+// ---- キャッチコピー（仮・要調整。従来の文言を踏襲）----
+const overline = 'WHITE HOUSE IMARI';
+const titleLines = ['緑と光に満ちた邸宅を', '大切な人たちだけの空間へ'];
+---
+
+<section class="hero" aria-label="メインビジュアル">
+  {/* 背景動画。controls は付けない（操作UIなしの背景再生）。
+      autoplay+muted+loop+playsinline の4点セットでスマホでも自動再生・無限ループ。 */}
+  <video
+    class="hero__video"
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="auto"
+    poster={poster}
+  >
+    <source src={videoSrc} type="video/mp4" />
+  </video>
+
+  <div class="hero__content">
+    <p class="hero__overline">{overline}</p>
+    <h1 class="hero__title" set:html={titleLines.join('<br />')}></h1>
+    <p class="hero__sub">
+      <span class="sub__line">佐賀県初の1棟1組完全貸切ゲストハウス</span><br class="sp">
+      <span class="sub__sep pc">　|　</span>
+      <span class="sub__line">2026年6月 リブランドOPEN</span>
+    </p>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    height: calc(100svh - var(--header-h));
+    min-height: 480px;
+    max-height: 900px;
+    overflow: hidden;
+    background-color: var(--off-white);
+  }
+
+  /* 動画はセクション全体を覆い、中央基準で切り抜く（写真と同じ見え方） */
+  .hero__video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  .hero__content {
+    position: absolute;
+    left: var(--space-section-x);
+    right: auto;
+    bottom: clamp(0px, 5vh, 72px);
+    padding: 28px 36px;
+    background-color: color-mix(in srgb, var(--dark-gray) 45%, transparent);
+    color: var(--white);
+    max-width: min(620px, calc(100% - var(--space-section-x) * 2));
+    z-index: 2;
+  }
+  .hero__overline {
+    font-family: var(--font-en-label);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--white);
+    margin-bottom: 18px;
+    opacity: 0.9;
+  }
+  .hero__title {
+    font-family: var(--font-jp-serif);
+    font-weight: var(--weight-light);
+    font-size: clamp(1.05rem, 3.6vw, 2.6rem);
+    line-height: 1.85;
+    color: var(--white);
+  }
+  .hero__sub {
+    margin-top: 20px;
+    font-size: clamp(0.75rem, 1.6vw, 0.9rem);
+    line-height: 1.9;
+    color: var(--white);
+    opacity: 0.92;
+  }
+  .sub__sep{
+    display:inline;
+  }
+
+  @media (max-width: 768px) {
+    .hero {
+      height: calc(82svh - var(--header-h));
+      min-height: 420px;
+    }
+    .hero__content {
+      padding: 20px 16px;
+    }
+    .hero__overline{
+    margin-bottom:0;
+    }
+    .hero__sub{
+    margin-top:5px;
+    line-height:1.2;
+    }
+    
+
+  }
+</style>
+
+<script>
+  // アクセシビリティ配慮：OSで「視差効果を減らす（モーションOFF）」を
+  // 設定している人には、動く背景動画を一時停止する。
+  // ※ const のアロー関数 + 型指定で、型チェック(astro check)に通す。
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) {
+    const video = document.querySelector<HTMLVideoElement>('.hero__video');
+    if (video) {
+      video.removeAttribute('autoplay');
+      video.pause();
+    }
+  }
+</script>

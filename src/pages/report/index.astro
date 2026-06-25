@@ -1,0 +1,78 @@
+---
+// =============================================================
+// src/pages/report/index.astro （ウェディングレポート一覧ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/report/
+// ・公開中の全レポートを ReportCard で一覧表示（plan/index.astro と同じ構成）。
+// ・最終CTAセクションも置いてCV導線を確保。
+// =============================================================
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import ReportCard from '../../components/report/ReportCard.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import { getReports } from '../../lib/getReports';
+
+const reports = getReports();
+---
+
+<BaseLayout
+  title="ウェディングレポート一覧｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里で実際に叶ったウェディングの実例集。少人数の家族婚から1棟貸切まで、おふたりの一日をご紹介します。"
+>
+  <PageHeader
+    overline="REPORT"
+    title="ウェディングレポート"
+    description="ホワイトハウス伊万里で叶ったおふたりの一日をご紹介します。実際の雰囲気を、ぜひご見学でもお確かめください。"
+  />
+
+  <section class="report-list">
+    <div class="report-list__inner">
+      {
+        reports.length === 0 ? (
+          <p class="report-list__empty">現在ご紹介できるレポートはありません。</p>
+        ) : (
+          <div class="report-list__grid">
+            {reports.map((report) => <ReportCard report={report} />)}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <CtaSection />
+</BaseLayout>
+
+<style>
+  .report-list {
+    background-color: var(--white);
+    padding-block: var(--space-section-y);
+  }
+  .report-list__inner {
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding-inline: var(--space-section-x);
+  }
+  .report-list__empty {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--gray);
+    padding: 80px 0;
+  }
+  .report-list__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: clamp(28px, 3vw, 40px);
+  }
+  @media (max-width: 900px) {
+    .report-list__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .report-list__grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+</style>

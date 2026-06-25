@@ -1,0 +1,1136 @@
+---
+// src/components/admin/SiteSettingsPanel.astro
+// サイト設定パネル（v2）。SNS・SEO・ナビゲーション・デザインをタブで切り替える。
+// データは Firestore の siteSettings コレクションから読み書きする。
+
+import fs from 'node:fs';
+import { headerNav, navGroups } from '../../lib/navigation';
+import type { NavLinkSetting, NavGroupSetting } from '../../types/siteSettings';
+
+// OGP画像ピッカー用の一覧をビルド時に作る（public/images/ogp/ の .jpg を列挙）。
+// FairPanel の fairImages と同じ方式。
+const OGP_IMG_DIR = 'public/images/ogp';
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+let ogpImages: { value: string; url: string }[] = [];
+if (fs.existsSync(OGP_IMG_DIR)) {
+  ogpImages = fs
+    .readdirSync(OGP_IMG_DIR)
+    .filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f)) // OGPはJPG以外も許容
+    .sort()
+    .map((f) => ({
+      value: `/images/ogp/${f}`,       // 保存値（フルパス・base なし）
+      url:   `${BASE}/images/ogp/${f}`, // ピッカーで表示する URL（base あり）
+    }));
+}
+
+// navigation.ts の既存データを NavLinkSetting / NavGroupSetting の形に変換して初期値にする
+const defaultHeaderNav: NavLinkSetting[] = headerNav.map((item, i) => ({
+  label:      item.label,
+  labelEn:    item.labelEn ?? '',
+  path:       item.path,
+  isVisible:  true,
+  isExternal: false,
+  sortOrder:  i,
+}));
+
+const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
+  title:     group.title,
+  isVisible: true,
+  sortOrder: gi,
+  links:     group.links.map((link, li) => ({
+    label:      link.label,
+    labelEn:    link.labelEn ?? '',
+    path:       link.path,
+    isVisible:  true,
+    isExternal: false,
+    sortOrder:  li,
+  })),
+}));
+
+
+---
+
+<div id="site-settings-panel">
+  <!-- パネル内タブ（外側）：SNS / SEO / ナビゲーション / デザイン -->
+  <div class="adm-innertab-bar">
+    <button class="adm-innertab is-active" data-stab="sns">SNS</button>
+    <button class="adm-innertab" data-stab="seo">SEO</button>
+    <button class="adm-innertab" data-stab="navigation">ナビゲーション</button>
+    <button class="adm-innertab" data-stab="design">デザイン</button>
+  </div>
+
+  <!-- 保存ボタン（全タブ共通・上部固定） -->
+  <div class="adm-actions">
+    <button id="ss-save-btn" class="adm-btn adm-btn--primary">保存する</button>
+  </div>
+
+  <!-- SNS設定 -->
+  <section class="adm-stab-section" data-stab-section="sns">
+    <h2 class="adm-section-title">SNS設定</h2>
+    <div class="adm-field">
+      <label class="adm-field-title">Instagram URL</label>
+      <input type="url" id="ss-instagram" placeholder="https://www.instagram.com/..." />
+    </div>
+    <div class="adm-field">
+      <label class="adm-field-title">Facebook URL</label>
+      <input type="url" id="ss-facebook" placeholder="https://www.facebook.com/..." />
+    </div>
+    <div class="adm-field">
+      <label class="adm-field-title">X（旧Twitter）URL</label>
+      <input type="url" id="ss-x" placeholder="https://x.com/..." />
+    </div>
+    <div class="adm-field">
+      <label class="adm-field-title">ブログ URL</label>
+      <input type="url" id="ss-blog" placeholder="https://..." />
+    </div>
+  </section>
+
+  <!-- SEO設定 -->
+  <section class="adm-stab-section" data-stab-section="seo" hidden>
+    <h2 class="adm-section-title">SEO設定</h2>
+
+    <!-- ページ選択タブ（内側）。data-seo-page でページIDを持つ -->
+    <div class="adm-innertab-bar adm-innertab-bar--wrap" id="ss-seo-tab-bar">
+      <button class="adm-innertab is-active" data-seo-page="top">トップ</button>
+      <button class="adm-innertab" data-seo-page="fair">フェア一覧</button>
+      <button class="adm-innertab" data-seo-page="fair-detail">フェア詳細</button>
+      <button class="adm-innertab" data-seo-page="plan">プラン一覧</button>
+      <button class="adm-innertab" data-seo-page="plan-detail">プラン詳細</button>
+      <button class="adm-innertab" data-seo-page="report">レポート一覧</button>
+      <button class="adm-innertab" data-seo-page="report-detail">レポート詳細</button>
+      <button class="adm-innertab" data-seo-page="news">お知らせ一覧</button>
+      <button class="adm-innertab" data-seo-page="news-detail">お知らせ詳細</button>
+      <button class="adm-innertab" data-seo-page="chapel">チャペル</button>
+      <button class="adm-innertab" data-seo-page="banquet">宴会場</button>
+      <button class="adm-innertab" data-seo-page="cuisine">料理</button>
+      <button class="adm-innertab" data-seo-page="access">アクセス</button>
+      <button class="adm-innertab" data-seo-page="faq">FAQ</button>
+      <button class="adm-innertab" data-seo-page="contact">お問い合わせ</button>
+    </div>
+
+    <!-- 各ページのフォーム。JS の renderSeoForm() が innerHTML を差し替える -->
+    <div id="ss-seo-form"></div>
+  </section>
+
+ <!-- ナビゲーション設定 -->
+ <section class="adm-stab-section" data-stab-section="navigation" hidden>
+   <h2 class="adm-section-title">ナビゲーション設定</h2>
+ 
+   <div class="adm-row">
+       <h3 class="adm-field-title">ヘッダーメニュー（PC横並び）</h3>
+       <p class="adm-note">ドラッグで並び替えできます。</p>
+       <!-- SortableJS が操作するリスト -->
+       <ul id="nav-header-list" class="adm-reorder-list"></ul>
+       <button type="button" class="adm-btn" id="nav-header-add-btn">
+         ＋ 項目を追加
+       </button>
+       
+       </div>
+       <div class="adm-row">
+       <h3 class="adm-field-title">ドロワー・フッターメニュー</h3>
+       <p class="adm-note">グループごとにドラッグで並び替えできます。</p>
+       <div id="nav-groups-container"></div>
+       <button type="button" class="adm-btn" id="nav-group-add-btn">
+         ＋ グループを追加
+       </button>
+     
+   </div>
+ </section>
+  <!-- デザイン設定 -->
+  <section class="adm-stab-section" data-stab-section="design" hidden>
+    <h2 class="adm-section-title">デザイン設定</h2>
+    
+    <!-- カラー設定 -->
+    <h3 class="adm-field-title">ブランドカラー</h3>
+    <div class="adm-card">
+      
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-color-bronze">
+          
+          <span class="adm-label-title">メインアクセントカラー</span>
+        </label>
+        <div class="adm-color-wrap">
+          <!-- type="color" はブラウザ標準のカラーピッカーを表示する -->
+          <input type="color" id="ds-color-bronze" class="adm-color-input" value="#9b7853" />
+          <!-- 16進数を直接入力できるテキスト欄（ピッカーと連動） -->
+          <input type="text" id="ds-color-bronze-hex" class="adm-input adm-input--hex" value="#9b7853" maxlength="7" />
+        </div>
+      </div>
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-color-green">
+        
+          <span class="adm-label-title">サブアクセントカラー</span>
+        </label>
+        <div class="adm-color-wrap">
+          <input type="color" id="ds-color-green" class="adm-color-input" value="#5e7441" />
+          <input type="text" id="ds-color-green-hex" class="adm-input adm-input--hex" value="#5e7441" maxlength="7" />
+        </div>
+      </div>
+    </div>
+  
+    <!-- フォント設定 -->
+    <h3 class="adm-field-title">フォント</h3>
+    <div class="adm-card">
+      
+  
+      <!-- フォント選択に使う選択肢は script 側で定数として持つ。
+           ここでは select 要素だけ置いておき、script が option を生成する。 -->
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-font-jp-serif">
+          <span class="adm-label-title">本文・見出しのメインフォント</span>
+        </label>
+        <select id="ds-font-jp-serif" class="adm-select"></select>
+      </div>
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-font-jp-sans">
+          
+          <span class="adm-label-title">UIテキスト・キャプション等</span>
+        </label>
+        <select id="ds-font-jp-sans" class="adm-select"></select>
+      </div>
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-font-en-display">
+          
+          <span class="adm-label-title">大見出し・ロゴ周辺</span>
+        </label>
+        <select id="ds-font-en-display" class="adm-select"></select>
+      </div>
+      <div class="adm-field-row">
+        <label class="adm-label" for="ds-font-en-label">
+          
+          <span class="adm-label-title">ボタン・タグ・ナビゲーション</span>
+        </label>
+        <select id="ds-font-en-label" class="adm-select"></select>
+      </div>
+    </div>
+  
+    <!-- ボタン形状 -->
+    <h3 class="adm-field-title">ボタン形状</h3>
+    <div class="adm-card">
+      
+      <div class="adm-shape-group" role="radiogroup" aria-label="ボタン形状">
+  
+        <!-- ラジオボタンを視覚的に隠して、カード風UIで選択させる -->
+        <label class="adm-shape-card" data-shape="square">
+          <input type="radio" name="ds-button-shape" value="square" class="adm-shape-radio" />
+          <!-- プレビュー用のボタン。実際のサイトのボタンではなくイメージ用 -->
+          <span class="adm-shape-preview adm-shape-preview--square">Aa</span>
+          <span class="adm-shape-label">角あり</span>
+        </label>
+  
+        <label class="adm-shape-card" data-shape="rounded">
+          <input type="radio" name="ds-button-shape" value="rounded" class="adm-shape-radio" />
+          <span class="adm-shape-preview adm-shape-preview--rounded">Aa</span>
+          <span class="adm-shape-label">角丸あり</span>
+        </label>
+  
+        <label class="adm-shape-card" data-shape="pill">
+          <input type="radio" name="ds-button-shape" value="pill" class="adm-shape-radio" />
+          <span class="adm-shape-preview adm-shape-preview--pill">Aa</span>
+          <span class="adm-shape-label">完全角丸</span>
+        </label>
+  
+      </div>
+    </div>
+  
+  </section>
+</div>
+
+
+
+<!-- OGP画像一覧：ビルド時に生成した配列を JSON として埋め込む。
+     クライアントJSがこの値を読んでピッカーのグリッドを作る。
+     is:inline を付けることで Astro のバンドル対象から外れ、ただのテキストノードになる。 -->
+<template id="ss-ogp-image-list">{JSON.stringify(ogpImages)}</template>
+
+<!-- ナビゲーション初期値：Firestoreに未保存の場合にこのデータを使う -->
+<template id="nav-default-data">{JSON.stringify({ headerNav: defaultHeaderNav, navGroups: defaultNavGroups })}</template>
+
+<script>
+  import { onAuthStateChanged } from 'firebase/auth';
+  import { auth } from '../../lib/firebase';
+  import Sortable from 'sortablejs'; // ドラッグ並び替え
+ import {
+   getSnsSettings,
+   saveSnsSettings,
+   getSeoSettings,
+   saveSeoSettings,
+   getNavigationSettings,
+   saveNavigationSettings,
+   getDesignSettings,
+   saveDesignSettings,
+ } from '../../lib/firestore';
+ import type {
+   SnsSettings,
+   SeoSettings,
+   NavigationSettings,
+   NavLinkSetting,
+   NavGroupSetting,
+   DesignSettings
+ } from '../../types/siteSettings';
+
+  // =============================================================
+  // 状態
+  // =============================================================
+
+  let workingSns: SnsSettings = {};
+  let savedSnapSns = ''; // 保存済みスナップショット（未保存検知用）
+  
+  // ナビゲーション設定の作業データ
+  let workingNav: NavigationSettings = { headerNav: [], navGroups: [] };
+  let savedSnapNav = '';
+
+  // SEO設定の作業データ。pages は「pageId → 設定値」のオブジェクト
+  let workingSeo: SeoSettings = { pages: {} };
+  let savedSnapSeo = '';
+  // 現在選択中のページID
+  let activeSeoPageId = 'top';
+  // OGP画像ピッカーで選択中のファイル名（確定前の一時保存）
+  let ogpPickerSelected = '';
+
+
+
+  // =============================================================
+  // 要素取得
+  // =============================================================
+
+  const instagramEl = document.getElementById('ss-instagram') as HTMLInputElement;
+  const facebookEl  = document.getElementById('ss-facebook')  as HTMLInputElement;
+  const xEl         = document.getElementById('ss-x')         as HTMLInputElement;
+  const blogEl      = document.getElementById('ss-blog')      as HTMLInputElement;
+  const saveBtn     = document.getElementById('ss-save-btn')  as HTMLButtonElement;
+
+  // =============================================================
+  // 外側タブ切り替え（SNS / SEO / ナビゲーション / デザイン）
+  // =============================================================
+
+  const tabBtns     = document.querySelectorAll<HTMLButtonElement>('.adm-innertab[data-stab]');
+  const tabSections = document.querySelectorAll<HTMLElement>('.adm-stab-section');
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.stab;
+      tabBtns.forEach(b => b.classList.toggle('is-active', b === btn));
+      tabSections.forEach(sec => {
+        sec.hidden = sec.dataset.stabSection !== target;
+      });
+    });
+  });
+
+  // =============================================================
+  // SNS
+  // =============================================================
+
+  // 画面 → workingSns に収集する
+  function harvestSns(): void {
+    workingSns = {
+      instagram: instagramEl.value.trim() || undefined,
+      facebook:  facebookEl.value.trim()  || undefined,
+      x:         xEl.value.trim()         || undefined,
+      blog:      blogEl.value.trim()       || undefined,
+    };
+  }
+
+  // workingSns → 画面に反映する
+  function populateSns(): void {
+    instagramEl.value = workingSns.instagram ?? '';
+    facebookEl.value  = workingSns.facebook  ?? '';
+    xEl.value         = workingSns.x         ?? '';
+    blogEl.value      = workingSns.blog      ?? '';
+  }
+
+  function snapSns(): string {
+    return JSON.stringify(workingSns);
+  }
+
+  function isSnsUnsaved(): boolean {
+    harvestSns();
+    return snapSns() !== savedSnapSns;
+  }
+
+  // =============================================================
+  // SEO
+  // =============================================================
+
+  // --- エスケープ関数 ---
+  // HTML属性値（value="..."）に埋め込む文字列に使う（XSS対策）
+  function escapeAttr(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // textarea の中身など、テキストノードに埋め込む文字列に使う
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // --- フォームを描画する ---
+  // ページタブを切り替えるたびに呼ぶ。
+  // innerHTML で差し替えるため、イベントリスナーも毎回付け直す。
+  function renderSeoForm(pageId: string): void {
+    const p = workingSeo.pages[pageId] ?? {
+      title: '', description: '', ogpImageUrl: '', noindex: false,
+    };
+
+    const formEl = document.getElementById('ss-seo-form') as HTMLDivElement;
+
+    // OGP画像プレビューURL（base を付けて表示する。§7 の base 連結ルール）
+   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+   const previewUrl = p.ogpImageUrl
+     ? `${BASE}/${p.ogpImageUrl.replace(/^\/+/, '')}`
+     : '';
+  
+
+    formEl.innerHTML = `
+    <div class="adm-card__body">
+    <div class="adm-row">
+    <div class="adm-card__first">
+    
+    
+      <div class="adm-field">
+        <label class="adm-field-title">ページタイトル（&lt;title&gt; タグ）</label>
+        <input type="text" id="ss-seo-title"
+          value="${escapeAttr(p.title)}"
+          placeholder="例：ブライダルフェア｜ホワイトハウス伊万里" />
+        <p class="adm-note">推奨：30〜35文字。末尾にサイト名を含める場合もこの文字数内で。</p>
+      </div>
+      <div class="adm-field">
+        <label class="adm-field-title">メタディスクリプション（検索結果に表示される説明文）</label>
+        <textarea id="ss-seo-desc" rows="3"
+          placeholder="例：佐賀県伊万里市の結婚式場。見学・相談会を随時開催中。"
+        >${escapeHtml(p.description)}</textarea>
+        <p class="adm-note">推奨：70〜120文字。</p>
+      </div>
+      
+      <div class="adm-field">
+        <label class="adm-field-title">
+          検索エンジンへの表示
+        </label>
+        <span class="adm-field-noindex"><input type="checkbox" id="ss-seo-noindex" ${p.noindex ? 'checked' : ''} />
+       検索エンジンに表示しない（noindex）</span>
+        <p class="adm-note">通常はオフ。テスト中のページなどに使用します。</p>
+      </div>
+      </div>
+      <div class="adm-card__second">
+      <div class="adm-field">
+        <label class="adm-field-title">OGP画像（SNSでシェアしたときのサムネ画像）</label>
+        <div class="adm-thumb-preview">
+          ${previewUrl
+            ? `<img src="${escapeAttr(previewUrl)}" alt="OGP画像プレビュー" class="adm-thumb-img" />`
+            : '<span class="adm-thumb-empty">未設定</span>'
+          }
+        </div>
+        <div class="adm-thumb-actions">
+          <button type="button" class="adm-btn" id="ss-ogp-open-btn">画像を選ぶ</button>
+          ${p.ogpImageUrl
+            ? `<button type="button" class="adm-btn" id="ss-ogp-clear-btn">削除</button>`
+            : ''
+          }
+        </div>
+        <!-- 実際の保存値（ファイルパス）を保持する hidden input -->
+        <input type="hidden" id="ss-seo-ogp" value="${escapeAttr(p.ogpImageUrl ?? '')}" />
+        <p class="adm-note">推奨サイズ：1200×630px（JPEG または PNG）。</p>
+      </div>
+      </div>
+      </div>
+      </div>
+    `;
+
+    // innerHTML を書き換えるとイベントが消えるため、描画のたびに付け直す
+    document.getElementById('ss-ogp-open-btn')
+      ?.addEventListener('click', openOgpPicker);
+    document.getElementById('ss-ogp-clear-btn')
+      ?.addEventListener('click', clearOgpImage);
+  }
+
+  // --- 画面 → workingSeo に収集する（現在表示中のページ分だけ） ---
+  // 非表示ページのデータは workingSeo にすでに入っているので触らない。
+  function harvestSeoPage(pageId: string): void {
+    const titleEl   = document.getElementById('ss-seo-title')   as HTMLInputElement   | null;
+    const descEl    = document.getElementById('ss-seo-desc')    as HTMLTextAreaElement | null;
+    const ogpEl     = document.getElementById('ss-seo-ogp')     as HTMLInputElement   | null;
+    const noindexEl = document.getElementById('ss-seo-noindex') as HTMLInputElement   | null;
+
+    // フォームが描画されていないページはスキップ（SEOタブが非表示のときなど）
+    if (!titleEl) return;
+
+    workingSeo.pages[pageId] = {
+      title:       titleEl.value.trim(),
+      description: descEl?.value.trim() ?? '',
+      ogpImageUrl: ogpEl?.value.trim() ?? '', // undefined ではなく空文字で保存する
+      noindex:     noindexEl?.checked ?? false,
+    };
+  }
+
+  function snapSeo(): string {
+    // キーの順序が変わっても同じと判定できるよう、キーを再帰ソートした JSON にする
+    return JSON.stringify(workingSeo, Object.keys(workingSeo).sort());
+  }
+
+  function isSeoUnsaved(): boolean {
+    harvestSeoPage(activeSeoPageId); // 現在表示中のページを先に収集してから比較
+    return snapSeo() !== savedSnapSeo;
+  }
+
+  // --- ページタブ切り替え ---
+  const seoTabBar = document.getElementById('ss-seo-tab-bar');
+  seoTabBar?.querySelectorAll<HTMLButtonElement>('[data-seo-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // 切り替え前に現在ページのフォーム値を working に保存する
+      harvestSeoPage(activeSeoPageId);
+      activeSeoPageId = btn.dataset.seoPage!;
+      // タブボタンのアクティブ状態を更新
+      seoTabBar.querySelectorAll('[data-seo-page]').forEach(b =>
+        b.classList.toggle('is-active', b === btn)
+      );
+      // 新しいページのフォームを描画
+      renderSeoForm(activeSeoPageId);
+    });
+  });
+
+// =============================================================
+  // ナビゲーション設定
+  // =============================================================
+  
+  // --- ヘルパー ---
+  
+  // 入力値が外部URLかどうかを判定する
+  function detectExternal(path: string): boolean {
+    return path.startsWith('http://') || path.startsWith('https://');
+  }
+  
+  // <template id="nav-default-data"> から初期値を取得する
+  function getNavDefaultData(): NavigationSettings {
+    const el = document.getElementById('nav-default-data') as HTMLTemplateElement | null;
+    if (!el) return { headerNav: [], navGroups: [] };
+    try {
+      return JSON.parse(el.innerHTML ?? '{}') as NavigationSettings;
+    } catch {
+      return { headerNav: [], navGroups: [] };
+    }
+  }
+  
+  // --- ヘッダーメニューのレンダリング ---
+  
+ let headerSortable: Sortable | null = null;
+ let groupSortables: Sortable[] = [];
+  
+  function renderHeaderNav(): void {
+    const list = document.getElementById('nav-header-list');
+    if (!list) return;
+  
+    list.innerHTML = workingNav.headerNav
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((item, i) => `
+        <li class="adm-reorder-item" data-nav-index="${i}">
+          <span class="adm-reorder-handle">≡</span>
+          <div class="adm-field-inline">
+            <div class="adm-field-inline-item"><span class="adm-field-inline-title">タイトル</span><input type="text"
+              class="nav-h-label"
+              value="${escapeAttr(item.label)}"
+              placeholder="ラベル" /></div>
+            <div class="adm-field-inline-item"><span class="adm-field-inline-title">英字表記</span><input type="text"
+              class="nav-h-label-en"
+              value="${escapeAttr(item.labelEn ?? '')}"
+              placeholder="英字（任意）" /></div>
+            <div class="adm-field-inline-item"><span class="adm-field-inline-title">リンク先</span><input type="text"
+              class="nav-h-path"
+              value="${escapeAttr(item.path)}"
+              placeholder="/chapel または https://..." /></div>
+            
+          </div>
+          <label class="adm-toggle">
+            <input type="checkbox" class="nav-h-visible" ${item.isVisible ? 'checked' : ''} />
+            表示
+          </label>
+          <button type="button" class="adm-btn adm-btn--danger nav-h-remove" data-nav-index="${i}">削除</button>
+        </li>
+      `)
+      .join('');
+  
+    // 削除ボタン
+    list.querySelectorAll<HTMLButtonElement>('.nav-h-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.navIndex);
+        workingNav.headerNav.splice(idx, 1);
+        // sortOrder を詰め直す
+        workingNav.headerNav.forEach((item, i) => { item.sortOrder = i; });
+        renderHeaderNav();
+      });
+    });
+  
+    // SortableJS で並び替え（二重登録しないよう既存インスタンスを破棄）
+    if (headerSortable) headerSortable.destroy();
+    headerSortable = Sortable.create(list, {
+      handle: '.adm-reorder-handle',
+      animation: 150,
+      onEnd: () => {
+        harvestHeaderNav();
+        workingNav.headerNav.forEach((item, i) => { item.sortOrder = i; });
+        renderHeaderNav();
+      },
+    });
+  }
+  
+  // ヘッダーメニューの画面 → working 収集
+function harvestHeaderNav(): void {
+    const list = document.getElementById('nav-header-list');
+    if (!list) return;
+  
+    const items = list.querySelectorAll<HTMLLIElement>('[data-nav-index]');
+    const result: NavLinkSetting[] = [];
+  
+    items.forEach((li, i) => {
+      // li.querySelector ではなく各 input を null チェック付きで取得する
+      const labelEl   = li.querySelector<HTMLInputElement>('.nav-h-label');
+      const labelEnEl = li.querySelector<HTMLInputElement>('.nav-h-label-en');
+      const pathEl    = li.querySelector<HTMLInputElement>('.nav-h-path');
+      const visibleEl = li.querySelector<HTMLInputElement>('.nav-h-visible');
+  
+      // いずれかの要素が見つからない行はスキップ（描画中の不整合を無視する）
+      if (!labelEl || !pathEl || !visibleEl) return;
+  
+      const label   = labelEl.value.trim();
+      const labelEn = labelEnEl?.value.trim() ?? '';
+      const path    = pathEl.value.trim();
+      const visible = visibleEl.checked;
+  
+      result.push({
+        label,
+        labelEn,   // 空文字のまま保存する（undefined にしない）
+        path,
+        isVisible:  visible,
+        isExternal: detectExternal(path),
+        sortOrder:  i,
+      });
+    });
+  
+    workingNav.headerNav = result;
+  }
+  
+  // --- ドロワー・フッターメニューのレンダリング ---
+  
+  function renderNavGroups(): void {
+    const container = document.getElementById('nav-groups-container');
+    if (!container) return;
+  
+    // グループSortableを一度全破棄
+    groupSortables.forEach(s => s.destroy());
+    groupSortables = [];
+  
+    container.innerHTML = workingNav.navGroups
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((group, gi) => `
+        <div class="adm-card adm-card--nav-group" data-group-index="${gi}">
+          <div class="adm-card__header">
+            <span class="adm-reorder-handle">≡</span>
+            <input type="text"
+              class="nav-g-title"
+              value="${escapeAttr(group.title)}"
+              placeholder="グループ名" />
+            <label class="adm-toggle">
+              <input type="checkbox" class="nav-g-visible" ${group.isVisible ? 'checked' : ''} />
+              表示
+            </label>
+            <button type="button"
+              class="adm-btn adm-btn--danger nav-g-remove"
+              data-group-index="${gi}">グループ削除</button>
+          </div>
+  
+          <!-- グループ内のリンク一覧 -->
+          <ul class="adm-reorder-list nav-group-links" data-group-index="${gi}">
+            ${group.links
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((link, li) => `
+                <li class="adm-reorder-item" data-link-index="${li}">
+                  <span class="adm-reorder-handle">≡</span>
+                  <div class="adm-field-inline">
+                   <div class="adm-field-inline-item"><span class="adm-field-inline-title">タイトル</span><input type="text"
+                      class="nav-l-label"
+                      value="${escapeAttr(link.label)}"
+                      placeholder="ラベル" /></div>
+                    <div class="adm-field-inline-item"><span class="adm-field-inline-title">英語表記</span><input type="text"
+                      class="nav-l-label-en"
+                      value="${escapeAttr(link.labelEn ?? '')}"
+                      placeholder="英字（任意）" /></div>
+                    <div class="adm-field-inline-item"><span class="adm-field-inline-title">リンク先</span><input type="text"
+                      class="nav-l-path"
+                      value="${escapeAttr(link.path)}"
+                      placeholder="/chapel または https://..." /></div>
+                    
+                  </div>
+                  <label class="adm-toggle">
+                    <input type="checkbox" class="nav-l-visible" ${link.isVisible ? 'checked' : ''} />
+                    表示
+                  </label>
+                  <button type="button"
+                    class="adm-btn adm-btn--danger nav-l-remove"
+                    data-group-index="${gi}"
+                    data-link-index="${li}">削除</button>
+                </li>
+              `).join('')}
+              <button type="button"
+              class="adm-btn nav-l-add"
+              data-group-index="${gi}">＋ リンクを追加</button>
+          </ul>
+  
+          
+        </div>
+      `)
+      .join('');
+  
+    // --- グループ内の削除・追加ボタン ---
+  
+    container.querySelectorAll<HTMLButtonElement>('.nav-g-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gi = Number(btn.dataset.groupIndex);
+        workingNav.navGroups.splice(gi, 1);
+        workingNav.navGroups.forEach((g, i) => { g.sortOrder = i; });
+        renderNavGroups();
+      });
+    });
+  
+    container.querySelectorAll<HTMLButtonElement>('.nav-l-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gi = Number(btn.dataset.groupIndex);
+        const li = Number(btn.dataset.linkIndex);
+        workingNav.navGroups[gi].links.splice(li, 1);
+        workingNav.navGroups[gi].links.forEach((l, i) => { l.sortOrder = i; });
+        renderNavGroups();
+      });
+    });
+  
+    container.querySelectorAll<HTMLButtonElement>('.nav-l-add').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gi = Number(btn.dataset.groupIndex);
+        const group = workingNav.navGroups[gi];
+        group.links.push({
+          label: '', labelEn: '', path: '/',
+          isVisible: true, isExternal: false,
+          sortOrder: group.links.length,
+        });
+        renderNavGroups();
+      });
+    });
+  
+    // --- グループ内リンクの SortableJS ---
+    container.querySelectorAll<HTMLUListElement>('.nav-group-links').forEach(ul => {
+      const gi = Number(ul.dataset.groupIndex);
+      
+      const s = Sortable.create(ul, {
+        handle: '.adm-reorder-handle',
+        animation: 150,
+        onEnd: () => {
+          harvestNavGroups();
+          workingNav.navGroups[gi].links.forEach((l, i) => { l.sortOrder = i; });
+          renderNavGroups();
+        },
+      });
+      groupSortables.push(s);
+    });
+  }
+  
+  // ドロワー・フッターの画面 → working 収集
+  function harvestNavGroups(): void {
+    const container = document.getElementById('nav-groups-container');
+    if (!container) return;
+  
+    const groupEls = container.querySelectorAll<HTMLDivElement>('[data-group-index]');
+    const result: NavGroupSetting[] = [];
+  
+    groupEls.forEach((groupEl, gi) => {
+    const titleEl   = groupEl.querySelector<HTMLInputElement>('.nav-g-title');
+    const visibleEl = groupEl.querySelector<HTMLInputElement>('.nav-g-visible');
+    
+    // グループ本体の要素が見つからない場合はスキップ
+    if (!titleEl || !visibleEl) return;
+    
+    const title   = titleEl.value.trim();
+    const visible = visibleEl.checked;
+    const linkEls = groupEl.querySelectorAll<HTMLLIElement>('[data-link-index]');
+    const links: NavLinkSetting[] = [];
+  
+linkEls.forEach((li, idx) => {
+      const labelEl   = li.querySelector<HTMLInputElement>('.nav-l-label');
+      const labelEnEl = li.querySelector<HTMLInputElement>('.nav-l-label-en');
+      const pathEl    = li.querySelector<HTMLInputElement>('.nav-l-path');
+      const visEl     = li.querySelector<HTMLInputElement>('.nav-l-visible');
+      
+      // 要素が見つからない行はスキップ
+      if (!labelEl || !pathEl || !visEl) return;
+      
+      const label   = labelEl.value.trim();
+      const labelEn = labelEnEl?.value.trim() ?? '';
+      const path    = pathEl.value.trim();
+      const vis     = visEl.checked;        
+      links.push({
+        label,
+        labelEn,   // 空文字のまま保存する（undefined にしない）
+        path,
+        isVisible:  vis,
+        isExternal: detectExternal(path),
+        sortOrder:  idx,
+      });
+      });
+  
+      result.push({
+        title,
+        isVisible: visible,
+        sortOrder: gi,
+        links,
+      });
+    });
+  
+    workingNav.navGroups = result;
+  }
+  
+  // --- 追加ボタン ---
+  
+  document.getElementById('nav-header-add-btn')?.addEventListener('click', () => {
+    workingNav.headerNav.push({
+      label: '', labelEn: '', path: '/',
+      isVisible: true, isExternal: false,
+      sortOrder: workingNav.headerNav.length,
+    });
+    renderHeaderNav();
+  });
+  
+  document.getElementById('nav-group-add-btn')?.addEventListener('click', () => {
+    workingNav.navGroups.push({
+      title: '', isVisible: true,
+      sortOrder: workingNav.navGroups.length,
+      links: [],
+    });
+    renderNavGroups();
+  });
+  
+  // --- 未保存検知 ---
+  
+  function snapNav(): string {
+    return JSON.stringify(workingNav);
+  }
+  
+  function isNavUnsaved(): boolean {
+    // 現在の画面の状態を working に収集してから比較
+    harvestHeaderNav();
+    harvestNavGroups();
+    return snapNav() !== savedSnapNav;
+  }
+
+  // =============================================================
+  // OGP画像ピッカー
+  // =============================================================
+
+// ピッカー関連のボタンはすべて document レベルで受け取る。
+  // ogpPickerEl / ogpPickerGrid は index.astro 側にあるため、
+  // ページ読み込み時点では取得できない。クリックのたびに取得し直す。
+  document.addEventListener('click', (ev) => {
+    const target = ev.target as Element;
+    const pickerEl = document.getElementById('ss-ogp-picker') as HTMLDivElement | null;
+    if (!pickerEl) return;
+  
+    // 背景クリック または ✕ボタン → 閉じる
+    if (
+      target.id === 'ss-ogp-picker-close' ||
+      target.id === 'ss-ogp-picker-close-btn'
+    ) {
+      pickerEl.hidden = true;
+      return;
+    }
+  
+// 「選択する」ボタン → 確定
+    if (target.id === 'ss-ogp-picker-confirm') {
+      if (!ogpPickerSelected) return;
+      // workingSeo を先に更新してから renderSeoForm を呼ぶ。
+      // hidden input に直接セットしても renderSeoForm は workingSeo を読むため反映されない。
+      harvestSeoPage(activeSeoPageId); // 現在のフォーム値を working に収集
+      if (!workingSeo.pages[activeSeoPageId]) {
+        workingSeo.pages[activeSeoPageId] = {
+          title: '', description: '', ogpImageUrl: '', noindex: false,
+        };
+      }
+      workingSeo.pages[activeSeoPageId].ogpImageUrl = ogpPickerSelected;
+      renderSeoForm(activeSeoPageId); // working から再描画
+      pickerEl.hidden = true;
+      return;
+    }
+  });
+  // <template> タグの中身は .innerHTML で取得する（textContent だと空になる）
+  function getOgpImageList(): { value: string; url: string }[] {
+    const el = document.getElementById('ss-ogp-image-list') as HTMLTemplateElement | null;
+    if (!el) return [];
+    try {
+      return JSON.parse(el.innerHTML ?? '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  function openOgpPicker(): void {
+    // 毎回取得し直す（index.astro 側の要素のため）
+    const pickerEl   = document.getElementById('ss-ogp-picker')      as HTMLDivElement | null;
+    const pickerGrid = document.getElementById('ss-ogp-picker-grid') as HTMLDivElement | null;
+    if (!pickerEl || !pickerGrid) return;
+  
+    const currentVal = (document.getElementById('ss-seo-ogp') as HTMLInputElement)?.value ?? '';
+    ogpPickerSelected = currentVal;
+  
+    const images = getOgpImageList();
+  console.log('images:', images);
+    if (images.length === 0) {
+      alert('public/images/ogp/ に画像がありません。先に画像を追加してください。');
+      return;
+    }
+  
+    pickerGrid.innerHTML = images
+      .map(({ value, url }) => `
+        <button type="button"
+          class="adm-picker__item${value === ogpPickerSelected ? ' is-selected' : ''}"
+          data-pick-value="${escapeAttr(value)}">
+          <img src="${escapeAttr(url)}" alt="" loading="lazy" />
+          <span class="adm-picker__name">${escapeHtml(value.split('/').pop() ?? '')}</span>
+        </button>
+      `)
+      .join('');
+  
+    // グリッド全体にイベント委譲
+    pickerGrid.onclick = (ev) => {
+      const item = (ev.target as Element).closest<HTMLButtonElement>('[data-pick-value]');
+      if (!item) return;
+      pickerGrid.querySelectorAll('.adm-picker__item')
+        .forEach(i => i.classList.remove('is-selected'));
+      item.classList.add('is-selected');
+      ogpPickerSelected = item.dataset.pickValue ?? '';
+    };
+  
+    pickerEl.hidden = false;
+  }
+
+  // OGP画像を削除してフォームを再描画する
+  function clearOgpImage(): void {
+    // workingSeo を先に更新してから renderSeoForm を呼ぶ（ピッカー確定と同じ方式）
+    harvestSeoPage(activeSeoPageId);
+    if (workingSeo.pages[activeSeoPageId]) {
+      workingSeo.pages[activeSeoPageId].ogpImageUrl = '';
+    }
+    renderSeoForm(activeSeoPageId);
+  }
+  
+  
+  // =====================
+  // デザイン設定
+  // =====================
+  
+  // サイトに読み込まれているフォントの選択肢（Google Fonts の link タグと一致させる）
+  const FONT_OPTIONS: { label: string; value: string }[] = [
+    { label: 'Noto Serif JP（日本語セリフ）', value: 'Noto Serif JP' },
+    { label: 'Noto Sans JP（日本語サンセリフ）', value: 'Noto Sans JP' },
+    { label: 'Cormorant Garamond（英字セリフ）', value: 'Cormorant Garamond' },
+    { label: 'Jost（英字サンセリフ）', value: 'Jost' },
+  ];
+  
+  // デフォルト値（variables.css の初期値と一致させる）
+  const DESIGN_DEFAULTS: DesignSettings = {
+    colorBronze: '#9b7853',
+    colorGreen:  '#5e7441',
+    fontJpSerif:    'Noto Serif JP',
+    fontJpSans:     'Noto Sans JP',
+    fontEnDisplay:  'Cormorant Garamond',
+    fontEnLabel:    'Jost',
+    buttonShape: 'square',
+  };
+  
+  // 現在の作業中データを保持する変数
+  let workingDesign: DesignSettings = { ...DESIGN_DEFAULTS };
+  
+  // 保存済みスナップショット（未保存検知に使う）
+  let savedDesignSnap: string = JSON.stringify(DESIGN_DEFAULTS);
+  
+  // ---- フォント select の option を生成する ----
+  function buildFontOptions(selectEl: HTMLSelectElement, currentValue: string) {
+    // 一度クリアしてから生成（再描画時に重複しないよう）
+    selectEl.innerHTML = '';
+    FONT_OPTIONS.forEach(({ label, value }) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      // 現在の設定値と一致する option を選択状態にする
+      if (value === currentValue) opt.selected = true;
+      selectEl.appendChild(opt);
+    });
+  }
+  
+  // ---- 画面に現在の working 値を反映する（populate） ----
+  function populateDesign() {
+    const d = workingDesign;
+  
+    // カラーピッカーとテキスト欄を同期
+    const bronzeEl    = document.getElementById('ds-color-bronze')     as HTMLInputElement | null;
+    const bronzeHexEl = document.getElementById('ds-color-bronze-hex') as HTMLInputElement | null;
+    const greenEl     = document.getElementById('ds-color-green')      as HTMLInputElement | null;
+    const greenHexEl  = document.getElementById('ds-color-green-hex')  as HTMLInputElement | null;
+  const bronze = d.colorBronze.toLowerCase();
+  const green  = d.colorGreen.toLowerCase();
+  if (bronzeEl)    bronzeEl.value    = bronze; // ← 変数を参照する
+  if (bronzeHexEl) bronzeHexEl.value = bronze;
+  if (greenEl)     greenEl.value     = green;
+  if (greenHexEl)  greenHexEl.value  = green;
+  
+    // フォント select に option を生成して選択状態を反映
+    const selJpSerif   = document.getElementById('ds-font-jp-serif')    as HTMLSelectElement | null;
+    const selJpSans    = document.getElementById('ds-font-jp-sans')     as HTMLSelectElement | null;
+    const selEnDisplay = document.getElementById('ds-font-en-display')  as HTMLSelectElement | null;
+    const selEnLabel   = document.getElementById('ds-font-en-label')    as HTMLSelectElement | null;
+  
+    if (selJpSerif)   buildFontOptions(selJpSerif,   d.fontJpSerif);
+    if (selJpSans)    buildFontOptions(selJpSans,     d.fontJpSans);
+    if (selEnDisplay) buildFontOptions(selEnDisplay,  d.fontEnDisplay);
+    if (selEnLabel)   buildFontOptions(selEnLabel,    d.fontEnLabel);
+  
+    // ボタン形状のラジオボタンを選択状態にする
+    const radioEl = document.querySelector(
+      `input[name="ds-button-shape"][value="${d.buttonShape}"]`
+    ) as HTMLInputElement | null;
+    if (radioEl) radioEl.checked = true;
+  }
+  
+  // ---- 画面から現在の値を収集する（harvest） ----
+  function harvestDesign(): DesignSettings {
+    const bronzeEl    = document.getElementById('ds-color-bronze')    as HTMLInputElement | null;
+    const greenEl     = document.getElementById('ds-color-green')     as HTMLInputElement | null;
+    const selJpSerif  = document.getElementById('ds-font-jp-serif')   as HTMLSelectElement | null;
+    const selJpSans   = document.getElementById('ds-font-jp-sans')    as HTMLSelectElement | null;
+    const selEnDisplay= document.getElementById('ds-font-en-display') as HTMLSelectElement | null;
+    const selEnLabel  = document.getElementById('ds-font-en-label')   as HTMLSelectElement | null;
+    const shapeEl     = document.querySelector(
+      'input[name="ds-button-shape"]:checked'
+    ) as HTMLInputElement | null;
+  
+    return {
+      colorBronze:   bronzeEl?.value     ?? workingDesign.colorBronze,
+      colorGreen:    greenEl?.value      ?? workingDesign.colorGreen,
+      fontJpSerif:   selJpSerif?.value   ?? workingDesign.fontJpSerif,
+      fontJpSans:    selJpSans?.value    ?? workingDesign.fontJpSans,
+      fontEnDisplay: selEnDisplay?.value ?? workingDesign.fontEnDisplay,
+      fontEnLabel:   selEnLabel?.value   ?? workingDesign.fontEnLabel,
+      // ラジオが未選択のときはデフォルト値にフォールバック
+      buttonShape: (shapeEl?.value as DesignSettings['buttonShape']) ?? 'square',
+    };
+  }
+  
+  // ---- 未保存かどうかを判定する ----
+  function isDesignUnsaved(): boolean {
+    return JSON.stringify(harvestDesign()) !== savedDesignSnap;
+  }
+  
+  // ---- カラーピッカーとテキスト欄を連動させるイベント登録 ----
+  function bindColorSync() {
+    // ピッカーを動かしたらテキスト欄も更新
+    document.getElementById('ds-color-bronze')?.addEventListener('input', (e) => {
+      const hex = (e.target as HTMLInputElement).value;
+      const hexEl = document.getElementById('ds-color-bronze-hex') as HTMLInputElement | null;
+      if (hexEl) hexEl.value = hex;
+    });
+    document.getElementById('ds-color-green')?.addEventListener('input', (e) => {
+      const hex = (e.target as HTMLInputElement).value;
+      const hexEl = document.getElementById('ds-color-green-hex') as HTMLInputElement | null;
+      if (hexEl) hexEl.value = hex;
+    });
+  
+    // テキスト欄を手入力したらピッカーも更新（#xxxxxx 形式の6桁のときだけ）
+    document.getElementById('ds-color-bronze-hex')?.addEventListener('input', (e) => {
+      const hex = (e.target as HTMLInputElement).value;
+      if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+        const pickerEl = document.getElementById('ds-color-bronze') as HTMLInputElement | null;
+        if (pickerEl) pickerEl.value = hex;
+      }
+    });
+    document.getElementById('ds-color-green-hex')?.addEventListener('input', (e) => {
+      const hex = (e.target as HTMLInputElement).value;
+      if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+        const pickerEl = document.getElementById('ds-color-green') as HTMLInputElement | null;
+        if (pickerEl) pickerEl.value = hex;
+      }
+    });
+  }
+  
+  
+
+  // =============================================================
+  // Firestore ロード・保存
+  // =============================================================
+
+async function load(): Promise<void> {
+    const [sns, seo, nav, design] = await Promise.all([
+      getSnsSettings(),
+      getSeoSettings(),
+      getNavigationSettings(),
+      getDesignSettings(), // デザイン設定を追加
+    ]);
+    workingSns = sns ?? {};
+    workingSeo = seo ?? { pages: {} };
+    workingNav = nav ?? getNavDefaultData();
+    // Firestoreに未保存の場合はデフォルト値で補完する
+    workingDesign = { ...DESIGN_DEFAULTS, ...(design ?? {}) };
+    populateSns();
+    renderSeoForm(activeSeoPageId);
+    renderHeaderNav();
+    renderNavGroups();
+    populateDesign(); // デザイン設定を画面に反映
+    bindColorSync();  // カラーピッカーの連動イベントを登録
+    savedSnapSns    = snapSns();
+    savedSnapSeo    = snapSeo();
+    savedSnapNav    = snapNav();
+    savedDesignSnap = JSON.stringify(workingDesign); // スナップショットを記録
+  }
+
+async function save(): Promise<void> {
+    harvestSns();
+    harvestSeoPage(activeSeoPageId);
+    harvestHeaderNav();
+    harvestNavGroups();
+    workingDesign = harvestDesign(); // デザイン設定を収集
+    await Promise.all([
+      saveSnsSettings(workingSns),
+      saveSeoSettings(workingSeo),
+      saveNavigationSettings(workingNav),
+      saveDesignSettings(workingDesign), // デザイン設定を追加
+    ]);
+    savedSnapSns    = snapSns();
+    savedSnapSeo    = snapSeo();
+    savedSnapNav    = snapNav();
+    savedDesignSnap = JSON.stringify(workingDesign); // スナップショットを更新
+    alert('保存しました。');
+  }
+
+  // =============================================================
+  // 未保存検知・離脱ガード
+  // =============================================================
+
+  (window as unknown as {
+    adminDirtyReporters: Record<string, () => string[]>
+  }).adminDirtyReporters['site-settings'] = () => {
+    const labels: string[] = [];
+    if (isSnsUnsaved()) labels.push('【SNS設定】修正あり');
+    if (isSeoUnsaved()) labels.push('【SEO設定】修正あり');
+    if (isNavUnsaved()) labels.push('【ナビゲーション設定】修正あり');
+    if (isDesignUnsaved()) labels.push('【デザイン設定】修正あり');
+    return labels;
+  };
+
+  // =============================================================
+  // イベント・初期化
+  // =============================================================
+
+  saveBtn.addEventListener('click', save);
+
+  // 認証後にロードする（認証前に読むと Firestore が permission-denied を返すため）
+ onAuthStateChanged(auth, (user) => {
+   if (!user) { /* ログイン画面へ */ return; }
+   load(); // SNS・SEO・ナビゲーション・デザインをまとめて読み込む
+ });
+</script>

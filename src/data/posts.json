@@ -1,0 +1,38 @@
+[
+  {
+    "id": "renewal-open-2026-06",
+    "title": "2026年6月、ホワイトハウス伊万里 リブランドOPEN",
+    "body": "全面ガラス張りのチャペルとガーデンを一新。1棟1組完全貸切のスタイルでリブランドオープンいたします。",
+    "categoryId": "nc-info",
+    "publishedAt": "2026-05-15",
+    "isPublished": true,
+    "thumbnail": {
+      "src": "/images/news/renewal-open-2026-06.jpg",
+      "alt": "リブランドオープンする全面ガラス張りのチャペル"
+    }
+  },
+  {
+    "id": "instagram-launched",
+    "title": "公式 Instagram アカウントを開設しました",
+    "body": "邸宅の日常やコーディネート事例など、最新情報を順次発信していきます。ぜひフォローをお願いします。",
+    "categoryId": "nc-media",
+    "publishedAt": "2026-04-20",
+    "isPublished": true,
+    "thumbnail": {
+      "src": "/images/news/instagram-launched.jpg",
+      "alt": "公式Instagramで発信する邸宅の様子"
+    }
+  },
+  {
+    "id": "テストん",
+    "title": "てすてす",
+    "body": "テストん",
+    "publishedAt": "2026-06-08",
+    "isPublished": true,
+    "categoryId": "nc-fair",
+    "thumbnail": {
+      "src": "/images/news/instagram-launched.jpg",
+      "alt": "テストの画像"
+    }
+  }
+]

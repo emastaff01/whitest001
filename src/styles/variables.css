@@ -1,0 +1,53 @@
+:root {
+  --white: #ffffff;
+  --off-white: #fafaf7;
+  --pale-beige: #f2efea;
+
+  --charcoal: #2c2c2a;
+  --dark-gray: #4a4a47;
+  --gray: #8a8580;
+
+  --bronze: #9b7853;
+  --green: #5e7441;
+
+  --red: #af1a1a;
+
+  --font-jp-serif: "Noto Serif JP", serif;
+  --font-jp-sans: "Noto Sans JP", sans-serif;
+  --font-en-display: "Cormorant Garamond", serif;
+  --font-en-label: "Jost", sans-serif;
+
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+
+  --lh-body: 1.95;
+  --lh-catch: 2.2;
+
+  --space-section-y: 96px;
+  --space-section-x: 48px;
+  --space-element: 32px;
+  --space-card: 32px;
+
+  --maxw-content: 1120px;
+  --maxw-narrow: 720px;
+
+  --hairline-bronze: rgba(155, 120, 83, 0.2);
+  --hairline-green: rgba(94, 116, 65, 0.2);
+  --hairline-dark: rgba(0, 0, 0, 0.06);
+
+  --radius: 0px;
+  --radius-sm: 4px;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.04);
+
+  --header-h: 72px;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --space-section-y: 64px;
+    --space-section-x: 24px;
+    --header-h: 60px;
+  }
+}

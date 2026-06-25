@@ -1,0 +1,168 @@
+[
+  {
+    "id": "nc-info",
+    "group": "news-category",
+    "label": "お知らせ",
+    "sortOrder": 1,
+    "isPublished": true
+  },
+  {
+    "id": "nc-fair",
+    "group": "news-category",
+    "label": "フェア",
+    "sortOrder": 2,
+    "isPublished": true
+  },
+  {
+      "id": "nc-media",
+      "group": "news-category",
+      "label": "メディア",
+      "sortOrder": 3,
+      "isPublished": true
+    },
+    {
+      "id": "pi-ceremony",
+      "group": "plan-includes",
+      "label": "挙式",
+      "sortOrder": 1,
+      "isPublished": true
+    },
+    {
+      "id": "pi-reception",
+      "group": "plan-includes",
+      "label": "披露宴",
+      "sortOrder": 2,
+      "isPublished": true
+    },
+    {
+      "id": "pi-private",
+      "group": "plan-includes",
+      "label": "1棟貸切利用",
+      "sortOrder": 3,
+      "isPublished": true
+    },
+    {
+      "id": "pi-coordinate",
+      "group": "plan-includes",
+      "label": "コーディネート",
+      "sortOrder": 4,
+      "isPublished": true
+    },
+    {
+      "id": "pt-private",
+      "group": "plan-tags",
+      "label": "1棟貸切ウェディング",
+      "sortOrder": 1,
+      "isPublished": true
+    },
+    {
+        "id": "pt-small",
+        "group": "plan-tags",
+        "label": "少人数・家族婚",
+        "sortOrder": 2,
+        "isPublished": true
+      },
+      {
+        "id": "ft-tour",
+        "group": "fair-tags",
+        "label": "見学",
+        "sortOrder": 1,
+        "isPublished": true
+      },
+      {
+        "id": "ft-tasting",
+        "group": "fair-tags",
+        "label": "試食",
+        "sortOrder": 2,
+        "isPublished": true
+      },
+      {
+        "id": "ft-ceremony",
+        "group": "fair-tags",
+        "label": "模擬挙式",
+        "sortOrder": 3,
+        "isPublished": true
+      },
+      {
+        "id": "ft-consult",
+        "group": "fair-tags",
+        "label": "相談",
+        "sortOrder": 4,
+        "isPublished": true
+      },
+      {
+        "id": "ft-small",
+        "group": "fair-tags",
+        "label": "少人数向け",
+        "sortOrder": 5,
+        "isPublished": true
+      },
+      {
+        "id": "fc-ceremony",
+        "group": "fair-contents",
+        "label": "模擬挙式",
+        "icon": "ceremony",
+        "sortOrder": 1,
+        "isPublished": true
+      },
+      {
+        "id": "fc-reception",
+        "group": "fair-contents",
+        "label": "模擬披露宴",
+        "icon": "reception",
+        "sortOrder": 2,
+        "isPublished": true
+      },
+      {
+        "id": "fc-tasting",
+        "group": "fair-contents",
+        "label": "試食",
+        "icon": "tasting",
+        "sortOrder": 3,
+        "isPublished": true
+      },
+      {
+        "id": "fc-tour",
+        "group": "fair-contents",
+        "label": "館内見学",
+        "icon": "tour",
+        "sortOrder": 4,
+        "isPublished": true
+      },
+      {
+        "id": "fc-estimate",
+        "group": "fair-contents",
+        "label": "費用シミュレーション",
+        "icon": "estimate",
+        "sortOrder": 5,
+        "isPublished": true
+      },
+      {
+        "id": "rt-private",
+        "group": "report-tags",
+        "label": "1棟貸切",
+        "sortOrder": 1,
+        "isPublished": true
+      },
+      {
+        "id": "rt-garden",
+        "group": "report-tags",
+        "label": "ガーデン",
+        "sortOrder": 2,
+        "isPublished": true
+      },
+      {
+        "id": "rt-small",
+        "group": "report-tags",
+        "label": "少人数",
+        "sortOrder": 3,
+        "isPublished": true
+      },
+      {
+        "id": "rt-ceremony-only",
+        "group": "report-tags",
+        "label": "挙式のみ",
+        "sortOrder": 4,
+        "isPublished": true
+      }
+    ]

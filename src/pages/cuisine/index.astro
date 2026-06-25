@@ -1,0 +1,237 @@
+---
+// =============================================================
+// src/pages/cuisine/index.astro （料理 紹介ページ）
+// -------------------------------------------------------------
+// URL: /test-whi/cuisine/
+// ・chapel/index.astro をコピーし、文言・画像フォルダ名だけ変更したもの。
+// ・構造・CSS・ライトボックスのロジックは chapel と完全に同一。
+// ・画像は public/images/cuisine/ に配置（jpg＋webpのペア）。src は必ず .jpg 終わりで渡す。
+// =============================================================
+import fs from 'node:fs';   // フォルダ内のファイル一覧を読むための標準モジュール
+import path from 'node:path'; // OSに依存しない安全なパス連結のため
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/common/PageHeader.astro';
+import FairSection from '../../components/home/FairSection.astro';
+import CtaSection from '../../components/common/CtaSection.astro';
+import '../../styles/facility.css';
+
+// 画像パス用の小さなヘルパー（このサイトは /test-whi/ 配下で動くため base を付ける）
+// ※PlanCard は共通の toAssetPath/toWebpPath を使用。import 元の確認が要るため、
+//   ここでは url.ts と同じ import.meta.env.BASE_URL を使って安全にパスを組み立てる。
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // → '/test-whi'（末尾スラッシュなし）
+const asset = (p: string) => `${BASE}/${p.replace(/^\/+/, '')}`; // base とパスを必ずスラッシュ1個でつなぐ
+const webp = (p: string) => asset(p).replace(/\.jpg$/i, '.webp'); // 末尾 .jpg → .webp（変更なし）
+// （asset / webp の定義の直後に追加）
+// public/images/cuisine/ の中の .jpg を全部ギャラリーに使う。
+// ・ビルド時にNodeがフォルダを読むため、写真を足してビルドし直すと自動で増える。
+// ・.webp は <picture> の source 用なので一覧からは除外（jpg だけ拾う）。
+// ・フォルダが無くてもエラーで止まらないよう existsSync で保護。
+const cuisineDir = path.join(process.cwd(), 'public', 'images', 'cuisine');
+const galleryImages = fs.existsSync(cuisineDir)
+  ? fs
+      .readdirSync(cuisineDir)
+      .filter((f) => /\.jpg$/i.test(f)) // 拡張子 .jpg のみ
+      .sort() // ファイル名順で並びを安定させる（順番を変えたいときは名前の先頭に 01_ などを付ける）
+      .map((f) => `/images/cuisine/${f}`) // サイト内パス（base は asset/webp が後付け）
+  : [];
+---
+<BaseLayout
+  title="料理｜ホワイトハウス伊万里"
+  description="ホワイトハウス伊万里の婚礼料理。特選伊万里牛や伊勢海老など旬の地元食材を厳選。できたての美味しさをそのままにお届けします。"
+>
+  <PageHeader
+    overline="CUISINE"
+    title="料理"
+    description="旬の地元食材を、いちばん美味しい状態で。"
+  />
+
+  <section class="facility">
+    <div class="facility__inner">
+      {/* メインビジュアル（ヒーロー）。最初に見える画像なので loading は eager */}
+      <div class="facility__hero">
+        <picture>
+          <source type="image/webp" srcset={webp('/images/cuisine/cuisineTOP.jpg')} />
+          <img
+            src={asset('/images/cuisine/cuisineTOP.jpg')}
+            alt="ホワイトハウス伊万里の婚礼料理"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
+      </div>
+
+      {/* リード文 */}
+      <p class="facility__lead">
+        当会場ではその地域の旬の食材、つまりその土地で最も美味しい食材をふんだんに使っています。お料理を楽しみに足を運んで下さるゲストのために特選伊万里牛、伊勢海老、鮑、野菜など素材一つひとつを厳選しています。素材自体が持つ本来の味をお楽しみ下さい。
+      </p>
+
+      {/* 特徴ブロック1：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-01.jpg')} />
+            <img
+              src={asset('/images/cuisine/cuisine-photo-01.jpg')}
+              alt="厳選した旬の食材"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">旬の食材を活かして</h2>
+          <p class="facility__block-body">当会場ではその地域の旬の食材、つまりその土地で最も美味しい食材をふんだんに使っています。お料理を楽しみに足を運んで下さるゲストのために野菜・肉・魚など素材一つひとつを厳選しています。素材自体が持つ本来の味をお楽しみ下さい。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック2：--reverse で画像を右に配置 */}
+      <div class="facility__block facility__block--reverse">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-02.jpg')} />
+            <img
+              src={asset('/images/cuisine/cuisine-photo-02.jpg')}
+              alt="想いを込めた一品"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">一品一品に想いを込めて</h2>
+          <p class="facility__block-body">新郎新婦に同じ組み合わせが無いように、その数だけたくさんのゲストがいらっしゃいます。例えば、大切なおばあちゃんにはお箸で食べれる料理を作ったり、アレルギーがある方には別の食材を特別に用意したり。新郎新婦を祝うために訪れてくださったゲストの皆様に対し、新郎新婦と同じ想いで一品一品想いのこもった料理を作っています。</p>
+        </div>
+      </div>
+
+      {/* 特徴ブロック3：画像（左）＋テキスト（右） */}
+      <div class="facility__block">
+        <div class="facility__block-img">
+          <picture>
+            <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-03.jpg')} />
+            <img
+              src={asset('/images/cuisine/cuisine-photo-03.jpg')}
+              alt="各会場のすぐ近くに配したキッチン"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div class="facility__block-text">
+          <h2 class="facility__block-title">できたての美味しさを、そのままに</h2>
+          <p class="facility__block-body">当会場ではそれぞれのメニューを最も美味しく食べて頂けるよう最善の工夫をしています。各会場のすぐ近くにはキッチンを配置し、温かいものは温かいうちに、冷たいものは冷たいうちにお召し上がりいただけるよう配慮いたしています。まるで自分の家で料理をふるまっているかのようにパーティー会場の中にはおいしい香りがたちこめています。</p>
+        </div>
+      </div>
+      {/* ギャラリー（フォルダ内の全jpgを1:1サムネで表示。クリックで全画面） */}
+      {galleryImages.length > 0 && (
+        <div class="facility__gallery">
+          {galleryImages.map((src, i) => (
+            <button type="button" class="gallery-thumb" data-index={i} aria-label={`料理の写真${i + 1}を拡大表示`}>
+              <picture>
+                <source type="image/webp" srcset={webp(src)} />
+                <img src={asset(src)} alt="" loading="lazy" decoding="async" />
+              </picture>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+{/* 全画面ギャラリー（ライトボックス）。初期は hidden で非表示。JSで開閉する */}
+  <div class="lightbox" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="ギャラリー拡大表示">
+    <button type="button" class="lightbox__close" aria-label="閉じる">×</button>
+    <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="前の画像">‹</button>
+    <div class="lightbox__stage">
+      <img class="lightbox__img" src="" alt="" />
+    </div>
+    <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="次の画像">›</button>
+    <p class="lightbox__counter"><span class="lightbox__current">1</span> / <span class="lightbox__total">1</span></p>
+  </div>
+  <FairSection compact />
+  <CtaSection />
+<script>
+    // ギャラリーのライトボックス：拡大・前後送り・スワイプ・キー操作・閉じる。
+    // ・画像URLは各サムネイルの <img src> から読む。型を明示し astro check を通す。
+    // ・show/open/close は const の矢印関数にする（function だと巻き上げで型の絞り込みが効かないため）。
+    const gallery = document.querySelector<HTMLElement>('.facility__gallery');
+    const lightbox = document.querySelector<HTMLElement>('.lightbox');
+    const lbImg = lightbox?.querySelector<HTMLImageElement>('.lightbox__img') ?? null;
+    const current = lightbox?.querySelector<HTMLElement>('.lightbox__current') ?? null;
+    const total = lightbox?.querySelector<HTMLElement>('.lightbox__total') ?? null;
+    const btnPrev = lightbox?.querySelector<HTMLElement>('.lightbox__nav--prev') ?? null;
+    const btnNext = lightbox?.querySelector<HTMLElement>('.lightbox__nav--next') ?? null;
+    const btnClose = lightbox?.querySelector<HTMLElement>('.lightbox__close') ?? null;
+  
+    // 必要な要素が全部そろったときだけ動かす（以降は null でないことが確定）
+    if (gallery && lightbox && lbImg && current && total && btnPrev && btnNext && btnClose) {
+      const thumbs = Array.from(gallery.querySelectorAll('.gallery-thumb'));
+      const sources = thumbs.map(
+        (btn) => btn.querySelector<HTMLImageElement>('img')?.getAttribute('src') ?? ''
+      );
+  
+      let index = 0; // いま表示している画像の番号（0始まり）
+      let lastFocused: HTMLElement | null = null; // 閉じたときフォーカスを戻す先
+  
+      total.textContent = String(sources.length);
+  
+      // 指定番号の画像を表示
+      const show = (i: number) => {
+        // 端を超えたら反対側へ回す（最後→最初、最初→最後）
+        index = (i + sources.length) % sources.length;
+        lbImg.src = sources[index];
+        lbImg.alt = '料理の写真 ' + (index + 1);
+        current.textContent = String(index + 1);
+      };
+  
+      // 開く
+      const open = (i: number) => {
+        lastFocused = document.activeElement as HTMLElement | null; // 押したサムネイルを覚える
+        show(i);
+        lightbox.hidden = false;
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden'; // 背面のスクロールを止める
+        btnClose.focus();
+      };
+  
+      // 閉じる
+      const close = () => {
+        lightbox.hidden = true;
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = ''; // スクロールを元に戻す
+        if (lastFocused) lastFocused.focus(); // 元のサムネイルへ戻す
+      };
+  
+      // サムネイルのクリックで開く
+      thumbs.forEach((btn, i) => btn.addEventListener('click', () => open(i)));
+  
+      // 前後送り・閉じる
+      btnPrev.addEventListener('click', () => show(index - 1));
+      btnNext.addEventListener('click', () => show(index + 1));
+      btnClose.addEventListener('click', close);
+  
+      // 背景（画像の外側）クリックで閉じる
+      lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) close();
+      });
+  
+      // キーボード操作（開いているときだけ）：Escで閉じる、←→で前後
+      document.addEventListener('keydown', (e) => {
+        if (lightbox.hidden) return;
+        if (e.key === 'Escape') close();
+        if (e.key === 'ArrowLeft') show(index - 1);
+        if (e.key === 'ArrowRight') show(index + 1);
+      });
+  
+      // スワイプ操作（スマホ）：横に40px以上動いたら前後送り
+      let startX = 0;
+      lightbox.addEventListener('touchstart', (e) => {
+        startX = e.changedTouches[0].clientX;
+      }, { passive: true });
+      lightbox.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        if (Math.abs(dx) > 40) {
+          show(dx < 0 ? index + 1 : index - 1); // 左へスワイプ＝次、右へ＝前
+        }
+      }, { passive: true });
+    }
+  </script>
+</BaseLayout>

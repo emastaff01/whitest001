@@ -1,0 +1,26 @@
+{
+  "name": "whitehouse-imari",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^5.7.0",
+    "firebase": "^12.14.0",
+    "flatpickr": "^4.6.13",
+    "sortablejs": "^1.15.7",
+    "swiper": "^12.2.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/node": "^25.9.1",
+    "@types/sortablejs": "^1.15.9",
+    "typescript": "^5.6.0"
+  }
+}

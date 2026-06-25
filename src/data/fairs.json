@@ -1,0 +1,121 @@
+[
+  {
+    "id": "premium-tour-202606",
+    "title": "リブランドOPEN記念 邸宅まるごと貸切見学フェア",
+    "catchCopy": "新チャペルを、おふたりだけで。今なら全ての費用をまるっと無料！！",
+    "description": "2026年6月リニューアルチャペルが無料で体験！水と緑のガーデンを1棟まるごとご見学いただけます。模擬挙式・無料試食つき。",
+    "thumbnail": {
+      "src": "/images/fairs/sample-fair-01.jpg",
+      "alt": "全面ガラス張りのチャペルを見学するフェアの様子"
+    },
+    "tagIds": [
+      "ft-tour",
+      "ft-tasting",
+      "ft-ceremony"
+    ],
+    "duration": "約2時間30分",
+    "contentIds": [
+      "fc-ceremony",
+      "fc-reception",
+      "fc-tasting",
+      "fc-tour"
+    ],
+    "schedule": [
+      {
+        "date": "2026-01-25",
+        "times": [
+          {
+            "time": "10:00",
+            "status": "few"
+          }
+        ]
+      },
+      {
+        "date": "2026-08-30",
+        "times": [
+          {
+            "time": "10:00",
+            "status": "available"
+          }
+        ]
+      },
+      {
+        "date": "2026-11-26",
+        "times": [
+          {
+            "time": "",
+            "status": "available"
+          }
+        ]
+      }
+    ],
+    "benefits": [
+      "無料試食",
+      "ドレス1点試着",
+      "館内まるごと見学"
+    ],
+    "contractBenefits": [
+      "挙式料 20%OFF",
+      "ペーパーアイテム一式プレゼント",
+      "前撮り1カットサービス"
+    ],
+    "reservationFormId": "premium-tour-202606",
+    "isPublished": true,
+    "sortOrder": 1
+  },
+  {
+    "id": "small-wedding-fair",
+    "title": "少人数のコンパクトな結婚式！今ならスタバチケット付き！",
+    "catchCopy": "近しい人とだけの、静かな一日。",
+    "description": "1000〜3000名規模の少人数・家族婚に特化した相談会です。費用シミュレーションと当日の流れをご案内します。",
+    "thumbnail": {
+      "src": "/images/fairs/sample-fair-02.jpg",
+      "alt": "少人数婚の相談カウンターの様子"
+    },
+    "tagIds": [
+      "ft-consult",
+      "ft-small"
+    ],
+    "duration": "約2時間",
+    "contentIds": [
+      "fc-estimate",
+      "fc-tour",
+      "fc-tasting"
+    ],
+    "schedule": [
+      {
+        "date": "2026-06-17",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "available"
+          },
+          {
+            "time": "14:00",
+            "status": "available"
+          }
+        ]
+      },
+      {
+        "date": "2026-12-24",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "available"
+          },
+          {
+            "time": "14:00",
+            "status": "available"
+          }
+        ]
+      }
+    ],
+    "benefits": [
+      "費用シミュレーション",
+      "個別相談"
+    ],
+    "reservationFormId": "small-wedding-fair",
+    "isPublished": true,
+    "sortOrder": 2
+  }
+]

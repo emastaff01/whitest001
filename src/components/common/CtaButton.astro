@@ -1,0 +1,114 @@
+---
+// =============================================================
+// CtaButton.astro （再利用できるCTAボタン）
+// -------------------------------------------------------------
+// サイト中のボタンを1つの部品にまとめます。見た目（variant）を
+// 切り替えるだけで、設計資料のボタンルールに沿った表示になります。
+//
+// variant の使い分け（設計資料3章に準拠）:
+//   outline … 基本。白背景＋チャコールの細罫線（多用してOK）
+//   solid   … 最重要時のみ。チャコールのベタ塗り（1画面に多用しない）
+//   line    … LINE導線。ボタニカルグリーン（--green）
+//   alert   … 緊急性の高いCTAのみ。深紅（--red）。原則ほぼ使わない
+//
+// ga プロパティ:
+//   クリックを計測したい時にGA4イベント名を渡します（例: 'lineCV'）。
+//   テスト段階はGA4未接続なので発火しませんが、本番接続後に自動で効きます。
+// =============================================================
+
+interface Props {
+  href: string; // リンク先（url()で作った内部リンク、または tel:/外部URL）
+  variant?: 'outline' | 'solid' | 'line' | 'alert';
+  ga?: string; // GA4イベント名（任意・クリック計測）
+  external?: boolean; // 外部サイトなら true（別タブで開く）
+  class?: string; // 追加クラス（任意）
+}
+
+const {
+  href,
+  variant = 'outline',
+  ga,
+  external = false,
+  class: className = '',
+} = Astro.props;
+
+// 外部リンクは別タブ＋セキュリティ属性を付ける
+const target = external ? '_blank' : undefined;
+const rel = external ? 'noopener noreferrer' : undefined;
+---
+
+<a
+  href={href}
+  class:list={['cta', `cta--${variant}`, className]}
+  data-ga={ga}
+  target={target}
+  rel={rel}
+>
+  <slot />
+</a>
+
+<style>
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 45px;
+    padding: 5px 30px;
+    font-family: var(--font-jp-sans);
+    font-weight: var(--weight-regular);
+    font-size: 0.95rem;
+    text-align: center;
+    border-radius: var(--radius);
+    border: 0.5px solid transparent;
+    transition:
+      color 0.25s ease,
+      background-color 0.25s ease,
+      border-color 0.25s ease;
+  }
+
+  .cta--outline {
+    color: var(--charcoal);
+    background-color: var(--white);
+    border-color: var(--charcoal);
+  }
+  .cta--outline:hover {
+    color: var(--white);
+    background-color: var(--charcoal);
+  }
+
+  .cta--solid {
+    color: var(--white);
+    background-color: var(--charcoal);
+    border-color: var(--charcoal);
+  }
+  .cta--solid:hover {
+    color: var(--charcoal);
+    background-color: var(--white);
+  }
+
+  .cta--line {
+    color: var(--white);
+    background-color: var(--green);
+    border-color: var(--green);
+  }
+  .cta--line:hover {
+    color: var(--green);
+    background-color: var(--white);
+  }
+
+  .cta--alert {
+    color: var(--white);
+    background-color: var(--red);
+    border-color: var(--red);
+  }
+  .cta--alert:hover {
+    color: var(--red);
+    background-color: var(--white);
+  }
+  @media (min-width: 768px) {
+    .cta{
+      width:150px;
+    }
+  }
+</style>
