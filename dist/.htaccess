@@ -1,5 +1,0 @@
-# ディレクトリの中身を一覧表示させない（セキュリティ・見た目の配慮）
-Options -Indexes
-
-# 各ディレクトリの既定ファイルを index.html にする
-DirectoryIndex index.html
