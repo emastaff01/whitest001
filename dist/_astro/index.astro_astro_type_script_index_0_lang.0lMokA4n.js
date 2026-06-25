@@ -1,1 +1,0 @@
-import{f as e,j as o}from"./flatpickr.min.BdnC1Xym.js";const t=document.querySelector("#date");t&&e(t,{locale:o.Japanese,minDate:"today",dateFormat:"Y-m-d",disable:[a=>a.getDay()===2||a.getDay()===3]});
