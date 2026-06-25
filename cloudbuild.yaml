@@ -1,26 +1,26 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-	args:
-	  - 'build'
-	  - '-t'
-	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
-	  - '.'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+      - '.'
   - name: 'gcr.io/cloud-builders/docker'
-	args:
-	  - 'push'
-	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+    args:
+      - 'push'
+      - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-	entrypoint: 'gcloud'
-	args:
-	  - 'run'
-	  - 'deploy'
-	  - 'test001'
-	  - '--image'
-	  - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
-	  - '--region'
-	  - 'asia-northeast1'
-	  - '--platform'
-	  - 'managed'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'test001'
+      - '--image'
+      - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
 
 images:
   - 'asia-northeast1-docker.pkg.dev/ema-pro01/test001/app:$COMMIT_SHA'
