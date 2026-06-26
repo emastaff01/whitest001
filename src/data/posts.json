@@ -1,13 +1,13 @@
 [
   {
     "id": "renewal-open-2026-06",
-    "title": "2026年6月、ホワイトハウス伊万里 リブランドOPEN",
-    "body": "全面ガラス張りのチャペルとガーデンを一新。1棟1組完全貸切のスタイルでリブランドオープンいたします。",
+    "title": "2026年7月、ホワイトハウス伊万里サイトリニューアルOPEN",
+    "body": "ホワイトハウス伊万里サイトリニューアルOPEN!!",
     "categoryId": "nc-info",
     "publishedAt": "2026-05-15",
     "isPublished": true,
     "thumbnail": {
-      "src": "/images/news/renewal-open-2026-06.jpg",
+      "src": "/images/news/renewal-open.jpg",
       "alt": "リブランドオープンする全面ガラス張りのチャペル"
     }
   },
@@ -31,7 +31,7 @@
     "isPublished": true,
     "categoryId": "nc-fair",
     "thumbnail": {
-      "src": "/images/news/instagram-launched.jpg",
+      "src": "/images/news/testpic.jpg",
       "alt": "テストの画像"
     }
   }
