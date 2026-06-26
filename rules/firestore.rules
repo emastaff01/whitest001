@@ -51,6 +51,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    match /banners/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
 
     // --- 送信データ：作成は全員OK（フォーム送信）、読取/更新/削除は管理者のみ ---
     match /fair_reservations/{docId} {

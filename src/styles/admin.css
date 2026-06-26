@@ -1313,7 +1313,8 @@ small{
   margin: 0 0 3rem;
 }
 
-.adm-stab-section #nav-header-list,.nav-group-links{
+.adm-stab-section #nav-header-list,.nav-group-links,
+#banner-list{
   list-style-type: none;
   width: 100%;
   padding: 0;
@@ -1322,7 +1323,8 @@ small{
 .adm-stab-section #nav-header-list,.nav-group-links .nav-l-add{
   margin: 1rem 0 0 1rem;
 }
-.adm-stab-section .adm-reorder-item{
+.adm-stab-section .adm-reorder-item,
+#banner-list .adm-reorder-item{
   background: #fff;
   border-radius: 8px;
   padding: 1rem;
@@ -1334,7 +1336,8 @@ small{
   gap: 2rem;
 }
 
-.adm-stab-section #nav-groups-container .adm-reorder-item{
+.adm-stab-section #nav-groups-container .adm-reorder-item,
+#banner-list .adm-reorder-item{
   border-radius: 8px;
   padding: .5rem 1rem;
   margin: 1rem 1rem 0;
@@ -1364,12 +1367,14 @@ border: 1px solid #eee;
     border: 1px solid var(--red);
     color: var(--red);
 }
-.adm-stab-section .adm-reorder-item .adm-field-inline{
+.adm-stab-section .adm-reorder-item .adm-field-inline,
+#banner-list .adm-reorder-item .adm-field-inline{
   display: flex;
   gap: 1rem;
 }
 
-.adm-stab-section .adm-reorder-item .adm-field-inline .adm-field-inline-item{
+.adm-stab-section .adm-reorder-item .adm-field-inline .adm-field-inline-item,
+#banner-list .adm-reorder-item .adm-field-inline-item{
   display: flex;
   flex-direction: column;
 }
@@ -1377,8 +1382,8 @@ border: 1px solid #eee;
   padding: 1rem;
   display: flex;
 }
-.adm-stab-section .adm-reorder-handle
-{
+.adm-stab-section .adm-reorder-handle,
+#banner-list .adm-reorder-item .adm-reorder-handle{
   width: 4rem;
   height: 4rem;
   background: transparent;
@@ -1393,7 +1398,8 @@ border: 1px solid #eee;
   cursor: grab;
 }
 
-.adm-stab-section .adm-reorder-item .adm-field-inline .adm-field-inline-title{
+.adm-stab-section .adm-reorder-item .adm-field-inline .adm-field-inline-title,
+#banner-list .adm-reorder-item  .adm-field-inline-title{
   align-content: center;
   padding: 0 1rem 0 0;
 }
@@ -1412,6 +1418,17 @@ border: 1px solid #eee;
 .adm-stab-section .adm-reorder-item  .adm-btn--danger {
     padding: 1rem 2rem;
     margin: 0;
+}
+
+.adm-field-inline-item-wrap{
+  display: flex;
+  flex-direction:column;
+}
+
+.adm-field-inline-item-wrap .adm-note{
+  border: none;
+  padding: 0;
+  margin: 0;
 }
 
 

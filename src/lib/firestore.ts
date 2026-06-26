@@ -5,7 +5,7 @@
 
 import { getDocs, collection, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Fair, Plan, Post, Report, Taxonomy } from '../types';
+import type { Fair, Plan, Post, Report, Taxonomy, Banner } from '../types';
 import type { DesignSettings, NavigationSettings, SeoSettings, SnsSettings } from '../types/siteSettings';
 
 function stripUndefined<T extends object>(obj: T): T {
@@ -173,4 +173,28 @@ export async function deleteReportFromDb(id: string): Promise<void> {
  
  export const saveSnsSettings = (data: SnsSettings) =>
    saveSiteSettingDoc("sns", data);
+
+
+// =============================================================
+// バナー（banners コレクション）
+// =============================================================
    
+   /** Firestore からバナーを全件取得する */
+   export async function getBannersFromDb(): Promise<Banner[]> {
+     const snap = await getDocs(collection(db, 'banners'));
+     return snap.docs.map((d) => ({
+       id: d.id,
+       ...(d.data() as Omit<Banner, 'id'>),
+     }));
+   }
+   
+   /** バナー1件を Firestore に保存する（id はドキュメントキー） */
+   export async function saveBannerToDb(banner: Banner): Promise<void> {
+     const { id, ...body } = banner;
+     await setDoc(doc(db, 'banners', id), stripUndefined(body));
+   }
+   
+   /** バナー1件を Firestore から削除する */
+   export async function deleteBannerFromDb(id: string): Promise<void> {
+     await deleteDoc(doc(db, 'banners', id));
+   }

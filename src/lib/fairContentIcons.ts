@@ -11,6 +11,7 @@
 //       ブラウザ用 script からは import 禁止（代わりに JSON島でデータを渡す）。
 // =============================================================
 import fs from 'node:fs';
+import * as path from 'path';
 
 const ICON_DIR = 'public/images/fair-icons';
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, ''); // 末尾スラッシュ除去（例 '/test-whi'）
@@ -36,3 +37,18 @@ export const iconUrlFor = (key: string, icons: IconEntry[]): string => {
   const def = icons.find((i) => i.key === 'default');
   return def ? def.url : `${BASE}/images/fair-icons/default.svg`; // 一覧に無くても default を指す
 };
+
+
+// =============================================================
+// バナー画像一覧（public/images/banners/ の .jpg を列挙）
+// frontmatter 限定 import。client script から使わないこと（fs は Node 専用）。
+// =============================================================
+export function listBannerImages(): string[] {
+  const dir = path.join(process.cwd(), 'public', 'images', 'banners');
+  // フォルダが存在しない場合は空配列を返す（ビルドエラーを防ぐ）
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.jpg')) // .webp は除外（.jpg が正本）
+    .sort();                            // ファイル名のアルファベット順
+}

@@ -9,6 +9,7 @@ import FairPanel from '../../components/admin/FairPanel.astro';
 import PlanPanel from '../../components/admin/PlanPanel.astro';
 import NewsPanel from '../../components/admin/NewsPanel.astro';
 import ReportPanel from '../../components/admin/ReportPanel.astro';
+import BannerPanel from '../../components/admin/BannerPanel.astro';
 import TaxonomyPanel from '../../components/admin/TaxonomyPanel.astro';
 import SiteSettingsPanel from '../../components/admin/SiteSettingsPanel.astro';
 ---
@@ -85,6 +86,14 @@ import SiteSettingsPanel from '../../components/admin/SiteSettingsPanel.astro';
               <button type="button" class="adm-tab adm-tab--sub" data-tab="report-tax">タグ管理</button>
             </details>
           </div>
+          <div class="adm-navgroup">
+            <details open>
+              <summary><div class="adm-navgroup__title">その他</div></summary>
+              <button type="button" class="adm-tab adm-tab--sub" data-tab="banner">
+                バナー管理
+              </button>
+            </details>
+          </div>
           <button type="button" class="adm-tab" id="logout-btn">ログアウト</button>
         </nav>
         <hr class="adm-nav-divider" />
@@ -151,6 +160,7 @@ import SiteSettingsPanel from '../../components/admin/SiteSettingsPanel.astro';
             { "group": "report-tags", "groupLabel": "タグ", "unitLabel": "タグ", "idPrefix": "rt-" }
           ]}
         />
+        <BannerPanel />
         
 <div data-panel="site-settings" hidden>
               <SiteSettingsPanel />

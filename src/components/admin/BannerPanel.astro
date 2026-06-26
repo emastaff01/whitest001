@@ -1,0 +1,407 @@
+---
+// =============================================================
+// src/components/admin/BannerPanel.astro
+// -------------------------------------------------------------
+// TOPページのバナースライダーを管理するパネル。
+// ナビゲーション設定（SiteSettingsPanel のヘッダーメニュー）と同じ
+// 「1本のインライン編集リスト」方式に統一した版。
+//   ・一覧と編集を同じ画面で行う（編集ビューへの画面切り替えなし）
+//   ・各カードに入力欄・トグル・削除ボタンを並べる
+//   ・SortableJS でドラッグ並べ替え（再描画のたびに作り直す）
+//   ・バナーは画像を持つので、共有ピッカーが対象カードを記憶する
+// =============================================================
+import { listBannerImages } from '../../lib/fairContentIcons';
+
+// noimage.jpg は「新規追加時の初期プレースホルダー」専用なので
+// ピッカーの選択肢には出さない（フィルタで除外する）
+const bannerImages = listBannerImages().filter((name) => name !== 'noimage.jpg');
+
+// base 付き安全連結（§7 の作法。BannerSlider.astro と同じ）
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const asset = (p: string) => `${BASE}/${p.replace(/^\/+/, '')}`;
+---
+
+<section class="adm-panel" data-panel="banner" hidden>
+  <header class="adm-panel__head">
+    <h2 class="adm-panel__title">バナー管理</h2>
+    <p class="adm-lead">
+      TOPページのバナースライダーを管理します。ドラッグハンドル（≡）で並び替えできます。
+    </p>
+    <p id="banner-status" class="adm-status"></p>
+  </header>
+
+  <div class="adm-toolbar">
+    <button type="button" id="banner-add-btn" class="adm-btn adm-btn--primary">
+      ＋ バナーを追加
+    </button>
+    <button type="button" id="banner-save-btn" class="adm-btn adm-btn--export">
+     保存する
+    </button>
+  </div>
+
+  {/* 単一の編集可能リスト（ナビゲーション設定と同じ inline 編集方式） */}
+  <ul id="banner-list" class="adm-reorder-list"></ul>
+</section>
+
+{/*
+  バナー画像ピッカー（position:fixed のオーバーレイ）。
+  adm-panel の外に置くと z-index の影響を受けにくい。SEO ピッカーと同じ方式。
+*/}
+<div class="adm-picker" id="banner-img-picker" hidden>
+  <div class="adm-picker__backdrop" id="banner-img-picker-backdrop"></div>
+  <div class="adm-picker__panel" role="dialog" aria-label="バナー画像を選択">
+    <div class="adm-picker__head">
+      <span class="adm-picker__title">バナー画像を選択</span>
+      <button type="button" class="adm-picker__close" id="banner-img-picker-close">✕</button>
+    </div>
+    <div class="adm-picker__grid" id="banner-img-picker-grid">
+      {/*
+        ビルド時に取得した画像ファイル名を列挙する。
+        data-src に base 付きの画像パスを持たせ、クリック時に JS 側で working へ反映する。
+      */}
+      {bannerImages.map((filename) => (
+        <button
+          type="button"
+          class="adm-picker__item"
+          data-src={`/images/banners/${filename}`}
+        >
+          <img
+            src={asset(`/images/banners/${filename}`)}
+            alt={filename}
+            loading="lazy"
+          />
+          <span>{filename}</span>
+        </button>
+      ))}
+    </div>
+  </div>
+</div>
+
+{/* import を使うので is:inline は付けない */}
+<script>
+  import Sortable from 'sortablejs';
+  import { getBannersFromDb, saveBannerToDb, deleteBannerFromDb } from '../../lib/firestore';
+  import { auth } from '../../lib/firebase';
+  import { onAuthStateChanged } from 'firebase/auth';
+  import { makeDocId } from '../../lib/admin';
+  import bannersJson from '../../data/banners.json';
+  import type { Banner } from '../../types';
+
+  // -------------------------------------------------------
+  // 状態変数
+  // -------------------------------------------------------
+  let working: Banner[] = [];        // 編集中のデータ（全件）
+  let savedSnap = '';                // 保存済みの JSON 文字列（未保存検知の基準値）
+  let sortable: Sortable | null = null;  // SortableJS インスタンス（再描画のたびに作り直す）
+  let pickerTargetIndex = -1;        // 画像ピッカーが編集対象にしているカードの番号
+
+  // -------------------------------------------------------
+  // DOM 取得（パネル直下の固定要素のみ。カード内の要素は描画ごとに取得する）
+  // -------------------------------------------------------
+  const listEl     = document.getElementById('banner-list')!;
+  const statusEl   = document.getElementById('banner-status')!;
+  const picker     = document.getElementById('banner-img-picker')!;
+  const pickerGrid = document.getElementById('banner-img-picker-grid')!;
+
+  // -------------------------------------------------------
+  // 属性値に安全に埋め込むためのエスケープ（ナビゲーション設定と同じ）
+  // -------------------------------------------------------
+  function escapeAttr(str: string): string {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ステータス表示用ヘルパー
+  function setStatus(msg: string): void {
+    statusEl.textContent = msg;
+  }
+  
+  // 変更後：ここをまるごと追加
+  const CLIENT_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+  
+  function stripBase(src: string): string {           // 先頭の base を取り除く
+    let p = String(src ?? '');
+    if (CLIENT_BASE && p.startsWith(CLIENT_BASE + '/')) p = p.slice(CLIENT_BASE.length);
+    return p;
+  }
+  function toStoredSrc(src: string): string {          // 保存用：base なしの正規形
+    const p = stripBase(src).replace(/^\/+/, '');
+    return p ? `/${p}` : '';
+  }
+  function toDisplaySrc(src: string): string {         // 表示用：base を1回だけ付ける
+    const p = stripBase(src).replace(/^\/+/, '');
+    return p ? `${CLIENT_BASE}/${p}` : '';
+    
+  }
+  const NO_IMAGE_SRC = '/images/banners/noimage.jpg';
+  
+  // 未保存検知の比較用：キーの順番・sortOrder のブレに依存しない
+  // 「正規化した署名文字列」を作る。比較は必ずこの関数を通す。
+  //   ・項目を固定の順番で書き出す（JSON.stringify のキー順問題を回避）
+  //   ・sortOrder は配列の並び順（index）で振り直して比較する
+  //   ・src は base なしに正規化してから比較する（表示用 base のブレを排除）
+  function bannerSig(list: Banner[]): string {
+    return JSON.stringify(
+      list.map((b, i) => ({
+        id: b.id,
+        src: toStoredSrc(b.image.src),
+        alt: b.image.alt,
+        href: b.href,
+        isPublished: b.isPublished,
+        sortOrder: i,
+      })),
+    );
+  }
+
+  // -------------------------------------------------------
+  // 一覧（＝編集フォーム）を描画する
+  //   working の各件を 1 枚のカードとして並べる。
+  //   id と画像パスは hidden input に持たせ、harvest が DOM だけから
+  //   全項目を復元できるようにする（並べ替えで順番が変わっても安全）。
+  // -------------------------------------------------------
+  function render(): void {
+    listEl.innerHTML = working
+      .map((b, i) => `
+        <li class="adm-reorder-item" data-banner-index="${i}">
+          <span class="adm-reorder-handle">≡</span>
+
+          <input type="hidden" class="banner-id" value="${escapeAttr(b.id)}" />
+          <input type="hidden" class="banner-img-src" value="${escapeAttr(b.image.src)}" />
+
+          <div class="adm-field-inline" style="align-items:flex-start;">
+            <div class="adm-field-inline-item" style="flex:0 0 auto;">
+              <span class="adm-field-inline-title">バナー画像</span>
+              ${
+                b.image.src
+                  ? `<img src="${escapeAttr(toDisplaySrc(b.image.src))}" alt="${escapeAttr(b.image.alt)}" width="160" height="54" style="object-fit:contain; border:1px solid #ddd; border-radius:4px; display:block;" />`
+                  : `<span style="color:#999; font-size:0.85rem;">（未選択）</span>`
+              }
+              <button type="button" class="adm-btn adm-btn--sm banner-pick-btn" data-banner-index="${i}" style="margin-top:6px;">
+                画像を選択
+              </button>
+            </div>
+            <div class="adm-field-inline-item-wrap">
+           <div class="adm-field-inline-item" style="flex:2;">
+             <span class="adm-field-inline-title">タイトル</span>
+             <input type="text" class="banner-alt adm-input"
+               value="${escapeAttr(b.image.alt)}"
+               placeholder="例：ブライダルフェア開催中" />
+               <p class="adm-note">※画像が表示されない場合の代替テキストです。</p>
+           </div>
+
+            <div class="adm-field-inline-item" style="flex:2;">
+              <span class="adm-field-inline-title">リンク先URL</span>
+              <input type="text" class="banner-href adm-input"
+                value="${escapeAttr(b.href)}"
+                placeholder="https://... または #" />
+            </div>
+            </div>
+          </div>
+
+          <label class="adm-toggle">
+            <input type="checkbox" class="banner-visible" ${b.isPublished ? 'checked' : ''} />
+            表示
+          </label>
+
+          <button type="button" class="adm-btn adm-btn--danger banner-remove" data-banner-index="${i}">
+            削除
+          </button>
+        </li>
+      `)
+      .join('');
+
+    // 削除ボタン（描画のたびに付け直す）
+    listEl.querySelectorAll<HTMLButtonElement>('.banner-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.bannerIndex);
+        if (idx < 0 || idx >= working.length) return;
+        const label = working[idx].image.alt || working[idx].id;
+        if (!confirm(`「${label}」を削除しますか？`)) return;
+        harvest();                 // 他カードの入力中の値を回収してから
+        working.splice(idx, 1);    // 該当カードを取り除く
+        working.forEach((b, i) => { b.sortOrder = i; });
+        render();
+      });
+    });
+
+    // 「画像を選択」ボタン（描画のたびに付け直す）
+    listEl.querySelectorAll<HTMLButtonElement>('.banner-pick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        pickerTargetIndex = Number(btn.dataset.bannerIndex);
+        picker.hidden = false;
+      });
+    });
+
+    // SortableJS で並び替え（二重登録しないよう既存インスタンスを破棄してから作る）
+    if (sortable) sortable.destroy();
+    sortable = Sortable.create(listEl, {
+      handle: '.adm-reorder-handle', // ハンドル部分だけドラッグ可能にする
+      animation: 150,
+      onEnd: () => {
+        harvest();                                   // DOM の新しい順番で working を作り直す
+        working.forEach((b, i) => { b.sortOrder = i; });
+        render();
+      },
+    });
+  }
+
+  // -------------------------------------------------------
+  // 画面（カード群）から値を回収して working を作り直す（harvest）
+  //   DOM の並び順をそのまま working の順番にするので、並べ替えにも対応できる。
+  // -------------------------------------------------------
+  function harvest(): void {
+    const items = listEl.querySelectorAll<HTMLLIElement>('[data-banner-index]');
+    const result: Banner[] = [];
+
+    items.forEach((li, i) => {
+      const idEl      = li.querySelector<HTMLInputElement>('.banner-id');
+      const srcEl     = li.querySelector<HTMLInputElement>('.banner-img-src');
+      const altEl     = li.querySelector<HTMLInputElement>('.banner-alt');
+      const hrefEl    = li.querySelector<HTMLInputElement>('.banner-href');
+      const visibleEl = li.querySelector<HTMLInputElement>('.banner-visible');
+      // 再描画タイミングで一部が見つからない行はスキップ（§7 既出のハマりどころ）
+      if (!idEl || !srcEl || !altEl || !hrefEl || !visibleEl) return;
+
+      result.push({
+        id: idEl.value,
+        image: { src: srcEl.value, alt: altEl.value },
+        href: hrefEl.value,
+        isPublished: visibleEl.checked,
+        sortOrder: i,
+      });
+    });
+
+    working = result;
+  }
+
+  // -------------------------------------------------------
+  // Firestore からデータを読み込む
+  // -------------------------------------------------------
+  async function load(): Promise<void> {
+    try {
+      const fromDb = await getBannersFromDb();
+      if (fromDb.length > 0) {
+        // Firestore にデータがあればそれを使う（sortOrder 順に並べる）
+        working = fromDb.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      } else {
+        // Firestore が空なら banners.json を初期値として表示する
+        working = (bannersJson as Banner[]).map((b) => ({ ...b }));
+      }
+      // 変更後：savedSnap の直前に1行追加
+    working = working.map((b) => ({ ...b, image: { ...b.image, src: toStoredSrc(b.image.src) } }));
+    working.forEach((b, i) => { b.sortOrder = i; });
+    savedSnap = bannerSig(working);   // 署名関数を通して基準値を作る
+    render();
+    } catch (e) {
+      console.error('バナーの読み込みに失敗しました', e);
+      setStatus('読み込みに失敗しました。コンソールを確認してください。');
+    }
+  }
+
+  // -------------------------------------------------------
+  // Firestore に保存する
+  // -------------------------------------------------------
+  async function save(): Promise<void> {
+    harvest(); // 画面の最新値を working に反映してから保存する
+
+    // 保存前に sortOrder を 0,1,2... で採番し直す（並べ替え後の順番を確定させる）
+    working.forEach((b, i) => { b.sortOrder = i; });
+
+    try {
+      // 削除対象を特定するために Firestore の現在の全件を取得する
+      const existing = await getBannersFromDb();
+      const existingIds = new Set(existing.map((b) => b.id));
+      const workingIds  = new Set(working.map((b) => b.id));
+
+      // working に残っていない id を Firestore から削除する
+      for (const id of existingIds) {
+        if (!workingIds.has(id)) {
+          await deleteBannerFromDb(id);
+        }
+      }
+      // working 全件を Firestore に保存する（上書き）
+      for (const b of working) {
+        await saveBannerToDb(b);
+      }
+
+      savedSnap = bannerSig(working);   // 保存後の基準値も同じ署名関数で作る
+      render();
+      setStatus('保存しました。');
+    } catch (e) {
+      console.error('保存に失敗しました', e);
+      setStatus('保存に失敗しました。コンソールを確認してください。');
+    }
+  }
+
+  // -------------------------------------------------------
+  // 未保存チェック（index.astro の離脱ガードに登録する）
+  // -------------------------------------------------------
+function unsavedLabels(): string[] {
+    harvest(); // 画面の最新状態を working に反映してから比較する
+    const current = bannerSig(working);   // 現在の状態も同じ署名関数で作って比較する
+    return current !== savedSnap ? ['バナー管理'] : [];
+  }
+
+  // index.astro の confirmLeave() から参照される登録処理
+  (window as unknown as { adminDirtyReporters: Record<string, () => string[]> })
+    .adminDirtyReporters ??= {};
+  (window as unknown as { adminDirtyReporters: Record<string, () => string[]> })
+    .adminDirtyReporters['banner'] = unsavedLabels;
+
+  // -------------------------------------------------------
+  // イベント：「＋ バナーを追加」ボタン（一度だけ登録）
+  // -------------------------------------------------------
+  document.getElementById('banner-add-btn')!.addEventListener('click', () => {
+    harvest(); // 既存カードの入力中の値を保持してから追加する
+    working.push({
+      id: makeDocId('bnr'),       // 例: bnr-20260626-123456-ab
+      image: { src: NO_IMAGE_SRC, alt: '' },
+      href: '#',
+      isPublished: false,         // 追加直後は非公開にして誤公開を防ぐ
+      sortOrder: working.length,
+    });
+    render();
+  });
+
+  // -------------------------------------------------------
+  // イベント：保存ボタン（一度だけ登録）
+  // -------------------------------------------------------
+  document.getElementById('banner-save-btn')!.addEventListener('click', save);
+
+  // -------------------------------------------------------
+  // イベント：画像ピッカー（パネル固定要素なので一度だけ登録）
+  // -------------------------------------------------------
+
+  // 「✕」ボタン → ピッカーを閉じる
+  document.getElementById('banner-img-picker-close')!.addEventListener('click', () => {
+    picker.hidden = true;
+  });
+
+  // 背景クリック → ピッカーを閉じる
+  document.getElementById('banner-img-picker-backdrop')!.addEventListener('click', () => {
+    picker.hidden = true;
+  });
+
+  // 画像グリッドのアイテムをクリック → 対象カードの画像を確定してピッカーを閉じる
+  pickerGrid.addEventListener('click', (e) => {
+    const item = (e.target as HTMLElement).closest<HTMLButtonElement>('.adm-picker__item');
+    if (!item) return;
+    if (pickerTargetIndex < 0 || pickerTargetIndex >= working.length) {
+      picker.hidden = true;
+      return;
+    }
+    const src = item.dataset.src ?? '';
+    harvest();                                      // 他カードの入力中の値を回収してから
+    working[pickerTargetIndex].image.src = toStoredSrc(src);     // 対象カードの画像だけ差し替える
+    render();                                       // プレビューを更新するため再描画
+    picker.hidden = true;
+  });
+
+  // -------------------------------------------------------
+  // 認証後にデータを読み込む（認証前に読もうとすると permission-denied になる）
+  // -------------------------------------------------------
+  onAuthStateChanged(auth, (user) => {
+    if (user) load();
+  });
+</script>
