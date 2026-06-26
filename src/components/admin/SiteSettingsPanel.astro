@@ -150,10 +150,11 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
           <span class="adm-label-title">メインアクセントカラー</span>
         </label>
         <div class="adm-color-wrap">
-          <!-- type="color" はブラウザ標準のカラーピッカーを表示する -->
-          <input type="color" id="ds-color-bronze" class="adm-color-input" value="#9b7853" />
-          <!-- 16進数を直接入力できるテキスト欄（ピッカーと連動） -->
-          <input type="text" id="ds-color-bronze-hex" class="adm-input adm-input--hex" value="#9b7853" maxlength="7" />
+          <div class="adm-color-wrap">
+            <input type="color" id="ds-color-green" class="adm-color-input" value="#5e7441" />
+            <input type="text" id="ds-color-green-hex" class="adm-input adm-input--hex" value="#5e7441" maxlength="7" />
+          </div>
+
         </div>
       </div>
       <div class="adm-field-row">
@@ -162,8 +163,10 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
           <span class="adm-label-title">サブアクセントカラー</span>
         </label>
         <div class="adm-color-wrap">
-          <input type="color" id="ds-color-green" class="adm-color-input" value="#5e7441" />
-          <input type="text" id="ds-color-green-hex" class="adm-input adm-input--hex" value="#5e7441" maxlength="7" />
+          <!-- type="color" はブラウザ標準のカラーピッカーを表示する -->
+          <input type="color" id="ds-color-bronze" class="adm-color-input" value="#9b7853" />
+          <!-- 16進数を直接入力できるテキスト欄（ピッカーと連動） -->
+          <input type="text" id="ds-color-bronze-hex" class="adm-input adm-input--hex" value="#9b7853" maxlength="7" />
         </div>
       </div>
     </div>
