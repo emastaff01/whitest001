@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/watch-webp.mjs --once && astro build",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "watch:img": "node scripts/watch-webp.mjs"
   },
   "dependencies": {
     "astro": "^5.7.0",
@@ -21,6 +22,8 @@
     "@astrojs/check": "^0.9.4",
     "@types/node": "^25.9.1",
     "@types/sortablejs": "^1.15.9",
+    "chokidar": "^4.0.3",
+    "sharp": "^0.35.2",
     "typescript": "^5.6.0"
   }
 }
