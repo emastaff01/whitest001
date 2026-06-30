@@ -48,7 +48,7 @@ const galleryImages = fs.existsSync(cuisineDir)
   <section class="facility">
     <div class="facility__inner">
       {/* メインビジュアル（ヒーロー）。最初に見える画像なので loading は eager */}
-      <div class="facility__hero">
+      <div class="facility__hero reveal">
         <picture>
           <source type="image/webp" srcset={webp('/images/cuisine/cuisineTOP.jpg')} />
           <img
@@ -67,7 +67,7 @@ const galleryImages = fs.existsSync(cuisineDir)
 
       {/* 特徴ブロック1：画像（左）＋テキスト（右） */}
       <div class="facility__block">
-        <div class="facility__block-img">
+        <div class="facility__block-img reveal">
           <picture>
             <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-01.jpg')} />
             <img
@@ -86,7 +86,7 @@ const galleryImages = fs.existsSync(cuisineDir)
 
       {/* 特徴ブロック2：--reverse で画像を右に配置 */}
       <div class="facility__block facility__block--reverse">
-        <div class="facility__block-img">
+        <div class="facility__block-img reveal">
           <picture>
             <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-02.jpg')} />
             <img
@@ -105,7 +105,7 @@ const galleryImages = fs.existsSync(cuisineDir)
 
       {/* 特徴ブロック3：画像（左）＋テキスト（右） */}
       <div class="facility__block">
-        <div class="facility__block-img">
+        <div class="facility__block-img reveal">
           <picture>
             <source type="image/webp" srcset={webp('/images/cuisine/cuisine-photo-03.jpg')} />
             <img

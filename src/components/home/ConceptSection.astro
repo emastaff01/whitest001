@@ -23,7 +23,7 @@ const bodyParagraphs = [
   <div class="concept__inner">
     <p class="concept__overline">CONCEPT</p>
     <h2 id="concept-heading" class="concept__headline">{headline}</h2>
-    <div class="concept__body">
+    <div class="concept__body reveal">
       {/* bodyParagraphsの文字列に <br /> 等のHTMLを書きたいので set:html
           外部入力（DB・フォーム等）から渡す場合は別途サニタイズが必要。 */}
       {bodyParagraphs.map((p) => <p set:html={p} />)}

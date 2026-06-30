@@ -32,7 +32,7 @@ const bodyParagraphs = [
     <p class="renewal__date" aria-hidden="true">{yearMonth}</p>
     <p class="renewal__overline">{overline}</p>
     <h2 id="renewal-heading" class="renewal__headline">{headline}</h2>
-    <div class="renewal__body">
+    <div class="renewal__body reveal">
       {/* set:html により <br /> 等のHTMLを文字列内に書ける（ConceptSection と同じ理由）。 */}
       {bodyParagraphs.map((p) => <p set:html={p} />)}
     </div>
@@ -90,9 +90,13 @@ const bodyParagraphs = [
   .renewal__body p + p {
     margin-top: 1.2em;
   }
-  .renewal__cta {
+  .renewal__cta{
     margin-top: 56px;
     display: flex;
     justify-content: center;
+  }
+  :global(.renewal__inner .renewal__cta a.cta) {
+   width:230px;
+   padding:.5rem;
   }
 </style>

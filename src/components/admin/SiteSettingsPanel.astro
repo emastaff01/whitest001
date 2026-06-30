@@ -57,6 +57,7 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
     <button class="adm-innertab" data-stab="seo">SEO</button>
     <button class="adm-innertab" data-stab="navigation">ナビゲーション</button>
     <button class="adm-innertab" data-stab="design">デザイン</button>
+    <button class="adm-innertab" data-stab="analytics">アクセス解析</button>
   </div>
 
   <!-- 保存ボタン（全タブ共通・上部固定） -->
@@ -237,6 +238,17 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
     </div>
   
   </section>
+  
+  <!-- アクセス解析（GA4）設定 -->
+  <section class="adm-stab-section" data-stab-section="analytics" hidden>
+    <h2 class="adm-section-title">アクセス解析（GA4）</h2>
+    <div class="adm-field">
+      <label class="adm-field-title" for="an-ga4-id">GA4 測定ID</label>
+      <input type="text" id="an-ga4-id" placeholder="G-XXXXXXXXXX" />
+      <p class="adm-note">Googleアナリティクス4の測定IDです。「G-」で始まる文字列を入力してください。空にすると計測タグは出力されません。</p>
+    </div>
+  </section>
+  
 </div>
 
 
@@ -262,6 +274,8 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
    saveNavigationSettings,
    getDesignSettings,
    saveDesignSettings,
+   getAnalyticsSettings,
+   saveAnalyticsSettings,
  } from '../../lib/firestore';
  import type {
    SnsSettings,
@@ -269,7 +283,8 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
    NavigationSettings,
    NavLinkSetting,
    NavGroupSetting,
-   DesignSettings
+   DesignSettings,
+   AnalyticsSettings,
  } from '../../types/siteSettings';
 
   // =============================================================
@@ -1061,34 +1076,73 @@ linkEls.forEach((li, idx) => {
     });
   }
   
+  // =====================
+  // アクセス解析（GA4）設定
+  // =====================
   
+  // デフォルト値（Firestore未保存のときに使う）
+  const ANALYTICS_DEFAULTS: AnalyticsSettings = {
+    ga4MeasurementId: '',
+  };
+  
+  // 現在の作業中データ
+  let workingAnalytics: AnalyticsSettings = { ...ANALYTICS_DEFAULTS };
+  
+  // 保存済みスナップショット（未保存検知に使う）
+  let savedAnalyticsSnap: string = JSON.stringify(ANALYTICS_DEFAULTS);
+  
+  // 測定IDの入力欄。デザイン設定と同じく1回だけ取得しておく
+  const ga4IdEl = document.getElementById('an-ga4-id') as HTMLInputElement | null;
+  
+  // working → 画面に反映する（populate）
+  function populateAnalytics(): void {
+    if (ga4IdEl) ga4IdEl.value = workingAnalytics.ga4MeasurementId ?? '';
+  }
+  
+  // 画面 → working に収集する（harvest）
+  function harvestAnalytics(): AnalyticsSettings {
+    return {
+      // 前後の空白を除去。測定IDをコピペしたとき末尾に空白が混じる事故を防ぐ
+      ga4MeasurementId: ga4IdEl?.value.trim() ?? '',
+    };
+  }
+  
+  // 未保存かどうかを判定する
+  function isAnalyticsUnsaved(): boolean {
+    return JSON.stringify(harvestAnalytics()) !== savedAnalyticsSnap;
+  }
+
 
   // =============================================================
   // Firestore ロード・保存
   // =============================================================
 
 async function load(): Promise<void> {
-    const [sns, seo, nav, design] = await Promise.all([
+    const [sns, seo, nav, design, analytics] = await Promise.all([
       getSnsSettings(),
       getSeoSettings(),
       getNavigationSettings(),
       getDesignSettings(), // デザイン設定を追加
+      getAnalyticsSettings(), // アクセス解析設定を追加
     ]);
     workingSns = sns ?? {};
     workingSeo = seo ?? { pages: {} };
     workingNav = nav ?? getNavDefaultData();
     // Firestoreに未保存の場合はデフォルト値で補完する
     workingDesign = { ...DESIGN_DEFAULTS, ...(design ?? {}) };
+    workingAnalytics = { ...ANALYTICS_DEFAULTS, ...(analytics ?? {}) };
     populateSns();
     renderSeoForm(activeSeoPageId);
     renderHeaderNav();
     renderNavGroups();
     populateDesign(); // デザイン設定を画面に反映
     bindColorSync();  // カラーピッカーの連動イベントを登録
+    populateAnalytics(); // アクセス解析設定を画面に反映
     savedSnapSns    = snapSns();
     savedSnapSeo    = snapSeo();
     savedSnapNav    = snapNav();
     savedDesignSnap = JSON.stringify(workingDesign); // スナップショットを記録
+    savedAnalyticsSnap = JSON.stringify(workingAnalytics); // スナップショットを記録
   }
 
 async function save(): Promise<void> {
@@ -1097,16 +1151,19 @@ async function save(): Promise<void> {
     harvestHeaderNav();
     harvestNavGroups();
     workingDesign = harvestDesign(); // デザイン設定を収集
+    workingAnalytics = harvestAnalytics(); // アクセス解析設定を収集
     await Promise.all([
       saveSnsSettings(workingSns),
       saveSeoSettings(workingSeo),
       saveNavigationSettings(workingNav),
       saveDesignSettings(workingDesign), // デザイン設定を追加
+      saveAnalyticsSettings(workingAnalytics), // アクセス解析設定を追加
     ]);
     savedSnapSns    = snapSns();
     savedSnapSeo    = snapSeo();
     savedSnapNav    = snapNav();
     savedDesignSnap = JSON.stringify(workingDesign); // スナップショットを更新
+    savedAnalyticsSnap = JSON.stringify(workingAnalytics); // スナップショットを更新
     alert('保存しました。');
   }
 
@@ -1122,6 +1179,7 @@ async function save(): Promise<void> {
     if (isSeoUnsaved()) labels.push('【SEO設定】修正あり');
     if (isNavUnsaved()) labels.push('【ナビゲーション設定】修正あり');
     if (isDesignUnsaved()) labels.push('【デザイン設定】修正あり');
+    if (isAnalyticsUnsaved()) labels.push('【アクセス解析設定】修正あり');
     return labels;
   };
 

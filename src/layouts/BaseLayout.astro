@@ -12,7 +12,7 @@ import Header from '../components/common/Header.astro';
 import Footer from '../components/common/Footer.astro';
 import '../styles/global.css';
  // Firestore からデザイン設定を取得する（失敗しても null になるだけでビルドは止まらない）
-import { getDesignSettings } from '../lib/firestore';
+import { getDesignSettings, getAnalyticsSettings } from '../lib/firestore';
 
 // 各ページから渡せる項目（プロパティ）を定義
 interface Props {
@@ -33,9 +33,7 @@ const settings = getSiteSettings();
 
 // サイトの公開URL（.envのPUBLIC_SITE_URLを優先。無ければ既定値）
 // origin（ホスト）だけを正にする。
-const SITE_URL =
-  import.meta.env.PUBLIC_SITE_URL ??
-  'https://ema-run-665477084949.asia-northeast1.run.app';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
 
 // base（/test-whi）を考慮した絶対URLを作るヘルパー
 // import.meta.env.BASE_URL には astro.config.mjs の base が入る
@@ -52,8 +50,7 @@ const logoURL = settings.logo
   ? new URL(`${base}${settings.logo}`.replace(/\/{2,}/g, '/'), SITE_URL).href
   : undefined;
 
-// GA4測定ID（テスト段階は空＝読み込まない。本番化フェーズで.envに設定）
-const GA4_ID = import.meta.env.PUBLIC_GA4_ID ?? '';
+
 
 // LocalBusiness構造化データ（MEO対策）。設計資料セクション6-2に準拠。
 const structuredData = {
@@ -101,14 +98,21 @@ const structuredData = {
   }
  
   const design = await getDesignSettings().catch(() => null);
+  // アクセス解析設定を Firestore から取得（失敗しても null になるだけでビルドは止まらない）
+  const analytics = await getAnalyticsSettings().catch(() => null);
+  
+  // GA4測定ID（管理画面のアクセス解析タブで保存した値を使う）。未設定なら空＝読み込まない
+  const GA4_ID = analytics?.ga4MeasurementId ?? '';
   ---
 
 <!doctype html>
 <html lang="ja">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  {/* JSが有効なときだけ html に js クラスを付ける。付く前提でだけ要素を隠すので、JS無効環境では中身が見えたまま＝安全 */}
+  <script is:inline>document.documentElement.classList.add('js');</script>
     {/* テストサイト段階：検索エンジンにインデックスさせない。本番化時に削除する */}
     <meta name="robots" content="noindex, nofollow" />
 
@@ -158,9 +162,9 @@ const structuredData = {
       )
     }
 
-    {/* GA4：テスト段階はGA4_IDが空のため読み込まれない。本番化フェーズで有効化 */}
+    {/* GA4：本番ビルド かつ 測定IDが保存されている時だけ出力。dev では出さない（自分のアクセスを除外） */}
     {
-      GA4_ID && (
+      import.meta.env.PROD && GA4_ID && (
         <>
           <script
             is:inline
@@ -210,9 +214,35 @@ const structuredData = {
         // gtag が読み込まれている時だけ送信（未接続時は安全に無視）
         const w = window as typeof window & { gtag?: (...args: unknown[]) => void };
         if (typeof w.gtag === 'function') {
-          w.gtag('event', eventName);
-        }
-      });
-    </script>
-  </body>
-</html>
+                  w.gtag('event', eventName);
+                }
+              });
+            </script>
+        
+            <script>
+              // 「.reveal」を付けた要素を、上辺が画面の上から約1/3に来たら下からふわっと表示する。
+              // 一度表示したら監視を外すので、アニメーションは1回だけ。
+              const revealEls = document.querySelectorAll('.reveal');
+        
+              if (revealEls.length > 0) {
+                // IntersectionObserver＝指定要素が「監視範囲」に入ったかを見張る標準API
+                const io = new IntersectionObserver((entries) => {
+                  for (const entry of entries) {
+                    // isIntersecting＝監視範囲に入った瞬間に true
+                    if (entry.isIntersecting) {
+                      entry.target.classList.add('is-visible'); // CSSのtransitionが走る
+                      io.unobserve(entry.target); // 1回きりにするため監視解除
+                    }
+                  }
+                }, {
+                  // 値は top right bottom left。下端を66%引き上げ＝監視範囲を「画面の上から約1/3」に絞る。
+                  // 早く出したいなら数字を小さく（例 -33%）、遅く出したいなら大きく（例 -80%）する。
+                  rootMargin: '0px 0px -25% 0px',
+                  threshold: 0, // 1pxでも入ったら発火
+                });
+        
+                revealEls.forEach((el) => io.observe(el));
+              }
+            </script>
+          </body>
+        </html>

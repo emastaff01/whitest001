@@ -62,4 +62,11 @@ export type SnsSettings = {
 };
 
 /** siteSettings コレクションのドキュメントIDの一覧（固定値） */
-export type SiteSettingsDocId = 'design' | 'navigation' | 'seo' | 'sns';
+export type SiteSettingsDocId = 'design' | 'navigation' | 'seo' | 'sns'| 'analytics';
+
+// アクセス解析（GA4）設定。siteSettings/analytics ドキュメントに保存する。
+// 既存JSON・Firestoreに無い項目を必須にすると型エラーになるため optional（?）にする（§7）。
+export interface AnalyticsSettings {
+  // GA4 の測定ID（G-XXXXXXXXXX 形式）。未設定なら空文字を保存する。
+  ga4MeasurementId?: string;
+};

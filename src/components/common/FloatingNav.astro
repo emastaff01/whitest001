@@ -136,6 +136,23 @@ width:60%;
   letter-spacing: 0.05em;
   font-family: var(--font-en-label);
 }
+@media (min-width: 769px) and (scripting: enabled) {
+  .floating__banner {
+    transform: translateX(120%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.45s ease, opacity 0.45s ease;
+  }
+  .floating__banner.is-shown {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .floating__banner.is-shown:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .floating__top { transition: opacity 0.25s ease; transform: none; }
   .floating__banner { transition: none; }
@@ -168,6 +185,28 @@ width:60%;
     // スクロールのたびに判定（passive: true で描画をブロックしない＝軽い）
     window.addEventListener('scroll', toggle, { passive: true });
     // 初期表示でも一度判定（リロード位置が下の場合に備える）
-    toggle();
-  }
-</script>
+    // 初期表示でも一度判定（リロード位置が下の場合に備える）
+        toggle();
+      }
+    
+      // 診断バナーの表示（PC）：ページの読み込みが完了したら右から1回スライドインし、以後はそのまま固定。
+        const banner = document.querySelector<HTMLAnchorElement>('.floating__banner');
+      
+        if (banner) {
+          // is-shown を付けると CSS の transition で右（translateX(120%)）から元位置へ滑り込む。
+          const showBanner = (): void => {
+            banner.classList.add('is-shown');
+          };
+      
+          // 読み込み完了後に出す。ページがすでに読み込み済みなら即時、まだなら load を待つ。
+          // requestAnimationFrame を1枚はさむのは、付与前の「隠れた状態」をブラウザに一度描画させ、
+          // そのうえで is-shown を付けて確実にアニメーション（右→元位置）を発火させるため。
+          if (document.readyState === 'complete') {
+            requestAnimationFrame(showBanner);
+          } else {
+            window.addEventListener('load', () => {
+              requestAnimationFrame(showBanner);
+            });
+          }
+        }
+      </script>

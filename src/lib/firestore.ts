@@ -6,7 +6,7 @@
 import { getDocs, collection, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Fair, Plan, Post, Report, Taxonomy, Banner } from '../types';
-import type { DesignSettings, NavigationSettings, SeoSettings, SnsSettings } from '../types/siteSettings';
+import type { DesignSettings, NavigationSettings, SeoSettings, SnsSettings, AnalyticsSettings } from '../types/siteSettings';
 
 function stripUndefined<T extends object>(obj: T): T {
   return Object.fromEntries(
@@ -161,6 +161,10 @@ export async function deleteReportFromDb(id: string): Promise<void> {
  
  export const getSnsSettings = () =>
    getSiteSettingDoc<SnsSettings>("sns");
+  
+  // アクセス解析（GA4）設定
+  export const getAnalyticsSettings = () =>
+    getSiteSettingDoc<AnalyticsSettings>('analytics');
  
  export const saveDesignSettings = (data: DesignSettings) =>
    saveSiteSettingDoc("design", data);
@@ -173,6 +177,10 @@ export async function deleteReportFromDb(id: string): Promise<void> {
  
  export const saveSnsSettings = (data: SnsSettings) =>
    saveSiteSettingDoc("sns", data);
+   
+  // アクセス解析（GA4）設定
+  export const saveAnalyticsSettings = (data: AnalyticsSettings) =>
+    saveSiteSettingDoc('analytics', data);
 
 
 // =============================================================
