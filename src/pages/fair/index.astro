@@ -113,6 +113,34 @@ const availableDateSet = new Set<string>(
   visibleFairs.flatMap((entry) => entry.availableSchedule.map((day) => day.date)),
 );
 
+// 日付（'YYYY-MM-DD'）から曜日番号（0=日 … 6=土）を求めるヘルパー。
+// new Date を直接使うとJSTで曜日が1日ズレ得るため、Date.UTC + getUTCDay で求める（§7の流儀）。
+const weekdayOf = (dateStr: string): number => {
+  const parts = dateStr.split('-'); // ['2026', '07', '22']
+  const yy = Number(parts[0]);
+  const mm = Number(parts[1]);
+  const dd = Number(parts[2]);
+  return new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay();
+};
+
+// 空席のある日の「曜日」を集めた集合（0=日 … 6=土）。
+// 曜日チップを「押せる／押せない」に出し分けるために使う（空席が1日も無い曜日はグレーアウト）。
+const availableWeekdaySet = new Set<number>(
+  [...availableDateSet].map((date) => weekdayOf(date)),
+);
+
+// 曜日チップの定義。表示順はカレンダーに合わせて月曜始まり。
+// num は getUTCDay の値（0=日 … 6=土）。data属性やJSの照合はこの数値で行う。
+const weekdayChips = [
+  { num: 1, label: '月' },
+  { num: 2, label: '火' },
+  { num: 3, label: '水' },
+  { num: 4, label: '木' },
+  { num: 5, label: '金' },
+  { num: 6, label: '土' },
+  { num: 0, label: '日' },
+];
+
 // カレンダーに出す月の範囲を決める。
 // 開始：今日の月。終了：空席のある最終日の月（空席日が無ければ今日の月だけ）。
 const sortedAvailable = [...availableDateSet].sort((a, b) => a.localeCompare(b));
@@ -207,11 +235,36 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     description="見学・試食・相談ができるフェアを開催中です。お気軽にお申し込みください。"
   />
 
-  <section class="fair-list">
-    <div class="fair-list__inner">
-      {
-        /* 表示対象のフェアがある時だけフィルタUIを出す */
-        visibleFairs.length > 0 && (
+<section class="fair-list">
+  {
+    /* 絞り込み条件バー（画面ヘッダーの下に追従・全幅）。
+       選んだ内容を名前で表示し、件数と解除ボタンも置く。
+       フェアが1件以上あるときだけ出す。 */
+    visibleFairs.length > 0 && (
+      <div class="fair-stickybar" data-fair-stickybar>
+        <div class="fair-stickybar__inner">
+          <div class="fair-stickybar__summary">
+            <p>開催日：<span data-summary-dates>すべて</span></p>
+            <p>曜日：<span data-summary-weekdays>すべて</span></p>
+            <p>フェア内容：<span data-summary-tags>すべて</span></p>
+          </div>
+          <div class="fair-stickybar__actions">
+            <p class="fair-stickybar__count">
+              <span data-fair-count>{visibleFairs.length}</span>件のフェアが該当
+            </p>
+            <button type="button" class="fair-stickybar__clear" data-fair-clear>
+              条件を解除する
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  <div class="fair-list__inner">
+    {
+      /* 表示対象のフェアがある時だけフィルタUIを出す */
+      visibleFairs.length > 0 && (
           <div class="fair-filter" data-fair-filter>
             <div class="fair-filter__cols">
               {/* 左カラム：開催日のカレンダー */}
@@ -286,10 +339,33 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* 右カラム：フェア内容のタグ */}
+                    </div>
+                  
+                    {/* 曜日で絞り込む（複数可・選んだ曜日のいずれかに空席があれば表示） */}
+                    <div class="fair-filter__weekdays">
+                      <p class="fair-filter__heading">曜日で絞り込む（複数可）</p>
+                      <div class="fair-filter__tags">
+                        {weekdayChips.map((wd) => (
+                          <label
+                            class:list={[
+                              'fair-filter__chip',
+                              { 'is-disabled': !availableWeekdaySet.has(wd.num) },
+                            ]}
+                          >
+                            <input
+                              type="checkbox"
+                              class="fair-filter__checkbox fair-filter__weekday-checkbox"
+                              value={wd.num}
+                              disabled={!availableWeekdaySet.has(wd.num)}
+                            />
+                            <span>{wd.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* 右カラム：フェア内容のタグ */}
               {fairTagList.length > 0 && (
                 <div class="fair-filter__col">
                   <p class="fair-filter__heading">フェア内容を選択（複数可）</p>
@@ -302,25 +378,11 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* 下部：解除ボタン＋選択状況の要約＋該当件数 */}
-            <div class="fair-filter__foot">
-              <button type="button" class="fair-filter__clear" data-fair-clear>
-                条件を解除する
-              </button>
-              <div class="fair-filter__summary">
-                <p>開催日：<span data-summary-dates>すべて</span></p>
-                <p>フェア内容：<span data-summary-tags>すべて</span></p>
-                <p class="fair-filter__count">
-                  <span data-fair-count>{visibleFairs.length}</span>件のフェアが該当
-                </p>
-              </div>
-            </div>
-          </div>
-        )
-      }
+                        )}
+                      </div>
+                    </div>
+                  )
+                }
 
       {
         visibleFairs.length === 0 ? (
@@ -335,12 +397,18 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
 
                 // 日付フィルタ用：このフェアの空席日一覧（半角スペース区切り）
                 const openDates = availableSchedule.map((day) => day.date).join(' ');
-
+                
+                // 曜日フィルタ用：空席日を曜日番号（0=日 … 6=土）に変換し、重複を除いた一覧（半角スペース区切り）
+                const openWeekdays = [
+                  ...new Set(availableSchedule.map((day) => weekdayOf(day.date))),
+                ].join(' ');
+                
                 return (
                   <div
                     class="fair-list__item"
                     data-tag-ids={(fair.tagIds ?? []).join(' ')}
                     data-open-dates={openDates}
+                    data-open-weekdays={openWeekdays}
                   >
                     <FairCard fair={fairForCard} />
                   </div>
@@ -455,6 +523,15 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     outline: 2px solid var(--bronze);
     outline-offset: 2px;
   }
+  .fair-filter__weekdays {
+    margin-top: 20px;
+  }
+  .fair-filter__chip.is-disabled {
+    cursor: default;
+  }
+  .fair-filter__chip.is-disabled span {
+    opacity: 0.35;
+  }
 
   /* ===== カレンダー（左カラム） ===== */
   .fair-cal__nav {
@@ -533,7 +610,8 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
   .fair-cal__mark {
     font-size: 0.8rem;
     line-height: 1;
-    color: var(--bronze);
+    color: var(--charcoal);
+    font-weight:bold;
   }
   .fair-cal__cell.is-sat {
     background-color: rgba(63, 111, 176, 0.06);
@@ -558,9 +636,9 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     cursor: pointer;
     transition: background-color 0.15s;
   }
-  .fair-cal__cell.is-available:hover {
-    background-color: var(--off-white);
-  }
+ .fair-cal__cell.is-available:not(.is-selected):hover {
+   background-color: var(--off-white);
+ }
   .fair-cal__cell.is-available:focus-visible {
     outline: 2px solid var(--bronze);
     outline-offset: -2px;
@@ -573,42 +651,93 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     color: var(--white);
   }
 
-  /* ===== 下部（解除・要約・件数） ===== */
-  .fair-filter__foot {
+/* ===== 絞り込み条件バー（ヘッダー下に追従・全幅） ===== */
+  .fair-stickybar {
+    position: sticky;
+    /* ヘッダー（画面上部に固定されている想定）の高さぶん下げ、その真下に貼り付ける。
+       ▼ヘッダーの実寸に合わせて数値を変える。固定ヘッダーでなければ 0px のままでよい。 */
+    top: var(--header-h);
+    z-index: 20;
+    background-color: rgba(94, 116, 65, 0.7);
+    backdrop-filter:blur(3px);
+    width:100%;
+    margin-bottom:1rem;
+  }
+  .fair-stickybar__inner {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--green);
+    gap: 10px 24px;
+    max-width: var(--maxw-content);
+    margin-inline: auto;
+    padding: 12px var(--space-section-x);
+    width:100%;
   }
-  .fair-filter__clear {
-    padding: 8px 20px;
-    background: none;
-    border: 1px solid var(--bronze);
+  @media (max-width: 600px) {
+   .fair-stickybar__inner {
+      padding: 10px .5rem;
+    }
+  }
+
+  .fair-stickybar__summary {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction:column;
+    gap: 2px 20px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    justify-content:space-between;
+    width:70%;
+  }
+  @media (max-width: 600px) {
+   .fair-stickybar__summary {
+   width:100%;
+    }
+  }
+  .fair-stickybar__summary p {
+    margin: 0;
+    color: var(--white);
+  }
+  .fair-stickybar__summary p span{
+   font-weight:bold;
+   background:white;
+   color:var(--charcoal);
+   padding:0px 3px;
+  }
+  .fair-stickybar__actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+  }
+  .fair-stickybar__count {
+    margin: 0;
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    color: var(--white);
+  }
+  .fair-stickybar__count span {
+    font-size: 1.15rem;
+    font-weight: bold;
+  }
+  .fair-stickybar__clear {
+    padding: 8px 18px;
+    background-color: var(--white);
+    border: 1px solid var(--red);
     border-radius: 8px;
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
-    color: var(--bronze);
+    color: var(--red);
     cursor: pointer;
+    white-space: nowrap;
   }
-  .fair-filter__summary {
-    margin-left: auto;
-    text-align: right;
-    font-family: var(--font-jp-sans);
-    font-size: 0.85rem;
-    color: var(--gray);
-  }
-  .fair-filter__count {
-    margin-top: 4px;
-    font-size: 1rem;
-    color: var(--green);
-  }
-  .fair-filter__count span {
-    font-size: 1.2rem;
-    font-weight: bold;
+  @media (max-width: 600px) {
+    .fair-stickybar__actions {
+      width: 100%;
+      justify-content: space-between;
+    }
   }
 
   .fair-list__item.is-hidden {
@@ -639,13 +768,20 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
   // 絞り込みUIやカードが無いページ（0件など）では何もしない。
   if (filter && grid) {
     // --- 要素の取得 ---
+    // タグ用チェックボックス（曜日用は別クラスなので :not で除外する）
     const checkboxes = Array.from(
-      filter.querySelectorAll<HTMLInputElement>('.fair-filter__checkbox'),
+      filter.querySelectorAll<HTMLInputElement>(
+        '.fair-filter__checkbox:not(.fair-filter__weekday-checkbox)',
+      ),
     );
-    const clearBtn = filter.querySelector<HTMLButtonElement>('[data-fair-clear]');
+    // 曜日用チェックボックス（月〜日）
+    const weekdayCheckboxes = Array.from(
+      filter.querySelectorAll<HTMLInputElement>('.fair-filter__weekday-checkbox'),
+    );
+    // 解除ボタン・要約・件数は「追従バー」側（フィルタ枠の外）へ移したので document から取る
+    const clearBtn = document.querySelector<HTMLButtonElement>('[data-fair-clear]');
     const items = Array.from(grid.querySelectorAll<HTMLElement>('.fair-list__item'));
     const noResult = document.querySelector<HTMLElement>('[data-fair-noresult]');
-
     // カレンダー関連
     const monthBlocks = Array.from(filter.querySelectorAll<HTMLElement>('.fair-cal__month'));
     // 押せる日（○）のマスだけ集める。× の日は disabled なのでそもそもクリックできない。
@@ -654,49 +790,105 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     );
     const navButtons = Array.from(filter.querySelectorAll<HTMLButtonElement>('[data-goto]'));
 
-    // 下部の表示先
-    const summaryDates = filter.querySelector<HTMLElement>('[data-summary-dates]');
-    const summaryTags = filter.querySelector<HTMLElement>('[data-summary-tags]');
-    const countEl = filter.querySelector<HTMLElement>('[data-fair-count]');
+    // 追従バーの表示先（フィルタ枠の外なので document から取る）
+    const summaryDates = document.querySelector<HTMLElement>('[data-summary-dates]');
+    const summaryWeekdays = document.querySelector<HTMLElement>('[data-summary-weekdays]');
+    const summaryTags = document.querySelector<HTMLElement>('[data-summary-tags]');
+    const countEl = document.querySelector<HTMLElement>('[data-fair-count]');
+    
+    // 曜日番号（'0'〜'6'）→ 表示名（日〜土）の対応表。要約に「水, 金」のように名前で出すため。
+    const WEEKDAY_LABELS: Record<string, string> = {
+      '0': '日',
+      '1': '月',
+      '2': '火',
+      '3': '水',
+      '4': '木',
+      '5': '金',
+      '6': '土',
+    };
 
     // 選択中の日付（複数）。重複を防ぐため Set を使う。
     const selectedDates = new Set<string>();
 
     // --- 表示判定 ---
     // カード1枚が表示対象か。タグはAND、日付はOR。
-    const matches = (item: HTMLElement, selectedTags: string[]) => {
+    const matches = (
+      item: HTMLElement,
+      selectedTags: string[],
+      selectedWeekdays: string[],
+    ) => {
+      // タグ：選んだタグを「すべて」持つフェアだけ（AND）
       const own = new Set((item.dataset.tagIds || '').split(' ').filter(Boolean));
       const tagOk = selectedTags.every((id) => own.has(id));
-
+    
+      // 日付：選んだ日の「いずれか」に空席があれば通過（OR）。未選択なら常に通過。
       const openDates = (item.dataset.openDates || '').split(' ').filter(Boolean);
       const dateOk =
         selectedDates.size === 0 || openDates.some((date) => selectedDates.has(date));
-
-      return tagOk && dateOk;
+    
+      // 曜日：選んだ曜日の「いずれか」に空席があれば通過（OR）。未選択なら常に通過。
+      // data-open-weekdays も value も文字列の数字（'0'〜'6'）なのでそのまま比較できる。
+      const openWeekdays = (item.dataset.openWeekdays || '').split(' ').filter(Boolean);
+      const weekdayOk =
+        selectedWeekdays.length === 0 ||
+        openWeekdays.some((wd) => selectedWeekdays.includes(wd));
+    
+      // タグ・日付・曜日をすべて満たすものだけ表示（軸どうしはAND）
+      return tagOk && dateOk && weekdayOk;
     };
 
     // --- 現在の選択状態で表示を更新 ---
     const apply = () => {
+      // タグ：判定用は id、表示用はラベル（チェックボックスの隣の span のテキスト）を取る
       const selectedTags = checkboxes.filter((c) => c.checked).map((c) => c.value);
-
+      const selectedTagLabels = checkboxes
+        .filter((c) => c.checked)
+        .map((c) => c.closest('label')?.querySelector('span')?.textContent?.trim() ?? c.value);
+    
+      // 曜日：判定用は数値文字列（'0'〜'6'）、表示用は対応表で名前に変換
+      const selectedWeekdays = weekdayCheckboxes
+        .filter((c) => c.checked)
+        .map((c) => c.value);
+      const selectedWeekdayLabels = selectedWeekdays.map((v) => WEEKDAY_LABELS[v] ?? v);
+    
       let visibleCount = 0;
       items.forEach((item) => {
-        const show = matches(item, selectedTags);
+        const show = matches(item, selectedTags, selectedWeekdays);
         item.classList.toggle('is-hidden', !show);
         if (show) visibleCount += 1;
       });
-
+    
       if (noResult) noResult.hidden = visibleCount > 0;
-
-      // 下部の要約・件数を更新
+    
+      // 件数
       if (countEl) countEl.textContent = String(visibleCount);
+    
+      // 開催日：選んだ日付を 'YYYY/M/D' で列挙（未選択なら「すべて」）
       if (summaryDates) {
-        summaryDates.textContent =
-          selectedDates.size === 0 ? 'すべて' : `${selectedDates.size}日選択中`;
+        if (selectedDates.size === 0) {
+          summaryDates.textContent = 'すべて';
+        } else {
+          const formatted = [...selectedDates]
+            .sort() // 'YYYY-MM-DD'（ゼロ埋め済み）なので文字列ソート＝日付の早い順
+            .map((ds) => {
+              const parts = ds.split('-'); // ['2026','07','05']
+              // 先頭ゼロを外して '2026/7/5' の形に（Number で 07 → 7）
+              return `${parts[0]}/${Number(parts[1])}/${Number(parts[2])}`;
+            });
+          summaryDates.textContent = formatted.join(', ');
+        }
       }
+    
+      // 曜日：選んだ曜日名を列挙
+      if (summaryWeekdays) {
+        summaryWeekdays.textContent =
+          selectedWeekdayLabels.length === 0 ? 'すべて' : selectedWeekdayLabels.join(', ');
+      }
+    
+      // フェア内容：選んだタグ名を列挙
       if (summaryTags) {
-        const n = selectedTags.length;
-        summaryTags.textContent = n === 0 ? 'すべて' : `${n}件選択中`;
+        summaryTags.textContent =
+          selectedTagLabels.length === 0 ? 'すべて' : selectedTagLabels.join(', ');
       }
     };
 
@@ -729,13 +921,17 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
       });
     });
 
-    // --- タグのチェック変更で反映 ---
-    checkboxes.forEach((c) => c.addEventListener('change', apply));
+   // --- タグのチェック変更で反映 ---
+   checkboxes.forEach((c) => c.addEventListener('change', apply));
+   
+   // --- 曜日のチェック変更で反映 ---
+   weekdayCheckboxes.forEach((c) => c.addEventListener('change', apply));
 
     // --- 「条件を解除する」：タグ・日付をすべてリセットし、最初の月に戻す ---
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         checkboxes.forEach((c) => (c.checked = false));
+        weekdayCheckboxes.forEach((c) => (c.checked = false)); // 曜日もリセット
         selectedDates.clear();
         dayCells.forEach((cell) => cell.classList.remove('is-selected'));
         showMonth(0);
