@@ -248,7 +248,7 @@ const events = fair.schedule.flatMap((day) =>
             <p class="fair-sched__label">時間を選ぶ</p>
             <div class="fair-sched__times" role="group" aria-label="開催時間"></div>
           </div>
-
+          <div class="fair-sched__contact">
           <p class="fair-sched__selected" aria-live="polite"></p>
 
           <div class="fair-dates__cta">
@@ -256,9 +256,9 @@ const events = fair.schedule.flatMap((day) =>
               この日程で予約に進む
             </CtaButton>
             <p class="fair-dates__note">
-              ご予約後、担当者より確認のご連絡をいたします。日程が未定でもお申し込みいただけます。
+              予約フォームにて、必要事項を入力の上、ご予約をお願いします。<br>ご予約後、担当者より確認のご連絡をいたします。
             </p>
-          </div>
+          </div></div>
         </div>
       </section>
 
@@ -618,27 +618,52 @@ const events = fair.schedule.flatMap((day) =>
   margin-right:1rem;
   display:block;
   }
-  
-  
 
   :global(.fair-sched__selected) {
     margin-top: 8px;
     min-height: 1.5em;
     font-family: var(--font-jp-sans);
-    font-size: 0.9rem;
-    color: var(--green);
+    font-size: 1.2rem;
+    color: var(--red);
+    text-align:center;
+    font-weight:bold;
+    text-decoration:underline;
   }
 
   .fair-dates__cta {
-    margin-top: 40px;
+    margin-top: 20px;
     text-align: center;
+  }
+  
+  .fair-dates__cta :global(.cta){
+    width:250px;
+    padding:1rem 0;
+    font-weight:bold;
   }
   .fair-dates__note {
     margin-top: 14px;
     font-family: var(--font-jp-sans);
     font-size: 0.8rem;
     color: var(--gray);
+    
   }
+  
+  :global(.fair-sched__contact){
+  width:90%;
+  margin:1rem auto;
+  background:var(--pale-beige);
+  padding:2rem 1rem;
+  
+  }
+  
+  :global(.fair-sched__contact){
+  width:90%;
+  margin:1rem auto;
+  background:var(--pale-beige);
+  padding:2rem 1rem;
+  }
+  
+  
 
   /* 特典 */
   .fair-detail__benefits {

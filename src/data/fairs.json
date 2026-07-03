@@ -22,16 +22,7 @@
     ],
     "schedule": [
       {
-        "date": "2026-01-25",
-        "times": [
-          {
-            "time": "10:00",
-            "status": "few"
-          }
-        ]
-      },
-      {
-        "date": "2026-08-30",
+        "date": "2026-07-31",
         "times": [
           {
             "time": "10:00",
@@ -40,11 +31,42 @@
         ]
       },
       {
-        "date": "2026-11-26",
+        "date": "2026-08-01",
+        "times": [
+          {
+            "time": "10:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-08-02",
+        "times": [
+          {
+            "time": "10:00",
+            "status": "available"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-12",
         "times": [
           {
             "time": "",
             "status": "available"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-26",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "full"
+          },
+          {
+            "time": "14:00",
+            "status": "full"
           }
         ]
       }
@@ -84,28 +106,54 @@
     ],
     "schedule": [
       {
-        "date": "2026-06-17",
+        "date": "2026-9-22",
         "times": [
           {
             "time": "11:00",
-            "status": "available"
+            "status": "full"
           },
           {
-            "time": "14:00",
-            "status": "available"
+            "time": "16:00",
+            "status": "few"
           }
         ]
       },
       {
-        "date": "2026-12-24",
+        "date": "2026-10-11",
         "times": [
           {
             "time": "11:00",
-            "status": "available"
+            "status": "full"
+          },
+          {
+            "time": "16:00",
+            "status": "few"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-26",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "full"
           },
           {
             "time": "14:00",
-            "status": "available"
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-12-19",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
           }
         ]
       }
@@ -117,5 +165,167 @@
     "reservationFormId": "small-wedding-fair",
     "isPublished": true,
     "sortOrder": 2
+  },
+  {
+    "id": "tasting-wedding-fair",
+    "title": "豪華料理コースを試食！オマール海老など盛りだくさん！",
+    "catchCopy": "今ならドレス試着無料！",
+    "description": "10〜30名規模の少人数・家族婚に特化した相談会です。豪華な料理も食べることができる！",
+    "thumbnail": {
+      "src": "/images/fairs/sample-fair-02.jpg",
+      "alt": "たくさんの豪華料理を試食"
+    },
+    "tagIds": [
+      "ft-consult",
+      "ft-small"
+    ],
+    "duration": "約1.5時間",
+    "contentIds": [
+      "fc-tour",
+      "fc-tasting"
+    ],
+    "schedule": [
+      {
+        "date": "2026-07-01",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-09-22",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "full"
+          },
+          {
+            "time": "16:00",
+            "status": "few"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-11",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-11-19",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "few"
+          },
+          {
+            "time": "14:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-12-19",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
+          }
+        ]
+      }
+    ],
+    "benefits": [
+      "見学",
+      "試食",
+      "個別相談"
+    ],
+    "reservationFormId": "small-wedding-fair",
+    "isPublished": true,
+    "sortOrder": 3
+  },
+  {
+    "id": "special-wedding-fair",
+    "title": "周年記念祭！今なら挙式料０円！",
+    "catchCopy": "挙式料０円！ドレスやタキシードも何着でも無料！",
+    "description": "周年を記念して、今なら挙式料を0円で！！豪華和牛のコース料理や新作ドレスも半額になる！",
+    "thumbnail": {
+      "src": "/images/fairs/sample-fair-03.jpg",
+      "alt": "周年記念祭！今なら挙式料０円！"
+    },
+    "tagIds": [
+      "ft-consult",
+      "ft-small"
+    ],
+    "duration": "約2.5時間",
+    "contentIds": [
+      "fc-tour",
+      "fc-tasting"
+    ],
+    "schedule": [
+      {
+        "date": "2026-07-31",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-11",
+        "times": [
+          {
+            "time": "12:00",
+            "status": "few"
+          },
+          {
+            "time": "15:00",
+            "status": "full"
+          }
+        ]
+      },
+      {
+        "date": "2026-11-19",
+        "times": [
+          {
+            "time": "11:00",
+            "status": "few"
+          },
+          {
+            "time": "14:00",
+            "status": "full"
+          }
+        ]
+      }
+    ],
+    "benefits": [
+      "見学",
+      "試食",
+      "少人数向け"
+    ],
+    "reservationFormId": "premium-tour-202607",
+    "isPublished": true,
+    "sortOrder": 4
   }
 ]
