@@ -159,7 +159,7 @@
       }
     ],
     "benefits": [
-      "費用シミュレーション",
+      "試食",
       "個別相談"
     ],
     "reservationFormId": "small-wedding-fair",
@@ -177,7 +177,7 @@
     },
     "tagIds": [
       "ft-consult",
-      "ft-small"
+      "ft-tour"
     ],
     "duration": "約1.5時間",
     "contentIds": [

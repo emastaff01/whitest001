@@ -14,6 +14,8 @@ import PageHeader from '../../components/common/PageHeader.astro';
 import FairCard from '../../components/fair/FairCard.astro';
 import CtaSection from '../../components/common/CtaSection.astro';
 import { getFairs } from '../../lib/getFairs';
+// 同日ブロックのリンク生成に使う（内部リンクは必ず url() を通す）。Fair 型も使う（案C用）。
+import type { Fair } from '../../types';
 // タグ絞り込み用に fair-tags のマスターを取得する（id -> タグ情報 の Map）。
 import { getTaxonomyMap } from '../../lib/getTaxonomies';
 // 祝日CSVを読むために使う。fs=ファイル読み込み、path=パス組み立て。
@@ -223,6 +225,54 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     iterYear += 1;
   }
 }
+
+// ===== 案X：同一日開催フェアのまとめ（日付ごと・折りたたみ）用データ =====
+// 曜日番号(0=日 … 6=土) -> 日本語表記。日付レールの「金」等に使う。
+const WEEKDAY_LABELS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+// 「日付 -> その日開催のフェア」を集める用のペア型。
+// FairCard には『その日1日だけの schedule』を渡したいので、フェア本体(fair)と その日の日程(day)を対で持つ。
+// NonNullable<...> は「schedule が optional(undefined あり得る)でも要素型を安全に取り出す」ための書き方。
+type SameDayEntry = { fair: Fair; day: NonNullable<Fair['schedule']>[number] };
+
+// 日付ごとに、その日開催のフェア(と日程)を集める。
+// visibleFairs は { fair, availableSchedule }。availableSchedule は「空席あり・今日以降」の日程だけ。
+const fairsByDate = new Map<string, SameDayEntry[]>();
+for (const { fair, availableSchedule } of visibleFairs) {
+  for (const day of availableSchedule) {
+    // その日付のリストが無ければ空配列を用意してから push する
+    const list = fairsByDate.get(day.date) ?? [];
+    list.push({ fair, day });
+    fairsByDate.set(day.date, list);
+  }
+}
+
+// Map を「日付の早い順」に並べ、各日付ブロックのデータに変換する。
+const sameDayBlocks = [...fairsByDate.entries()]
+  .sort((a, b) => a[0].localeCompare(b[0]))
+  .map(([date, entriesOnDay], dateIndex) => {
+    // 各日付で先頭に出す「代表フェア」を、日付の並び順に応じてずらす（＝回転）。
+    // これをしないと毎日同じフェアが先頭に来て「フェアは1種類だけ」と誤解される。
+    // 日付の通し番号(dateIndex)を、その日のフェア件数で割った余りを代表の位置にする。
+    // 例：その日のフェアが[A,B,C]なら 0日目→A / 1日目→B / 2日目→C / 3日目→A … と循環する。
+    const count = entriesOnDay.length;
+    const featuredIndex = count > 0 ? dateIndex % count : 0;
+    const featured = entriesOnDay[featuredIndex];
+    // 代表を除いた残り（元の順番は維持）。これが折りたたみ側に入る。
+    const rest = entriesOnDay.filter((_, idx) => idx !== featuredIndex);
+    // 代表を先頭に並べ替え。featured が万一 undefined でも型を保てるよう分岐する。
+    const ordered = featured ? [featured, ...rest] : rest;
+    return {
+    date, // 'YYYY-MM-DD'
+    weekdayLabel: WEEKDAY_LABELS_JA[weekdayOf(date)], // '金' など
+    weekdayNum: weekdayOf(date), // 0=日 … 6=土。B側の曜日絞り込み（ブロックごと出し隠し）に使う
+    isHoliday: holidaySet.has(date), // この日が祝日か（レールの色分け・祝日→赤に使う）
+      // FairCard 用：schedule をその日1日だけに差し替えたフェアの配列。
+      // これで FairCard が表示する代表日が、このブロックの日付にちょうど一致する
+      // （他日程が混じって「一番早い別の日」が表示される事故を防ぐ）。
+      cards: ordered.map(({ fair, day }) => ({ ...fair, schedule: [day] })),
+    };
+  });
 ---
 
 <BaseLayout
@@ -362,8 +412,11 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
                           </label>
                         ))}
                       </div>
-                    </div>
-                  </div>
+                        </div>
+                      
+                        {/* 日付選択中だけ表示する注意書き。普段は非表示にしておき、曜日セクションに is-locked が付いたら CSS で表示する */}
+                        <p class="fair-filter__weekdays-note">日付を選択中は曜日で絞り込めません</p>
+                      </div>
                   
                   {/* 右カラム：フェア内容のタグ */}
               {fairTagList.length > 0 && (
@@ -388,8 +441,65 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
         visibleFairs.length === 0 ? (
           <p class="fair-list__empty">現在開催予定のフェアはありません。</p>
         ) : (
-          <Fragment>
-            <div class="fair-list__grid">
+        <Fragment>
+          {/* 案X：同一日開催フェアのまとめ（日付ごと・折りたたみ）。既定は非表示、日付選択時にJSで表示する */}
+          <div class="fair-sameday" data-fair-sameday>
+            {sameDayBlocks.map((block) => (
+              <div
+                class="fair-sameday__block"
+                data-sameday-date={block.date}
+                data-weekday={block.weekdayNum}
+              >
+                {/* 左：日付レール。土=青・日=赤はカレンダーと同じ色分け（曜日名でクラスを付ける） */}
+                <div
+                  class:list={[
+                    'fair-sameday__rail',
+                    // 祝日は日曜と同じ赤にしたいので is-sun を優先。土曜は青。
+                    { 'is-sun': block.weekdayLabel === '日' || block.isHoliday },
+                    { 'is-sat': block.weekdayLabel === '土' && !block.isHoliday },
+                  ]}
+                >
+                  <span class="fair-sameday__railmd">
+                    <span class="fair-sameday__railyear">{block.date.slice(0, 4)}</span>{block.date.slice(5, 7)}<span class="fair-sameday__railslash">.</span>{block.date.slice(8, 10)}
+                  </span>
+                  <span class="fair-sameday__railwd">({block.weekdayLabel})</span>
+                </div>
+          
+                {/* 右：その日のフェア。先頭(代表)は常時表示、2件目以降は折りたたみ対象 */}
+                <div class="fair-sameday__content">
+                  <div class="fair-sameday__cards">
+                    {block.cards.map((fairForCard, idx) => (
+                      <div
+                        class:list={[
+                          'fair-sameday__card',
+                          { 'fair-sameday__card--extra': idx > 0 }, // 2件目以降は折りたたみで隠す
+                        ]}
+                        data-tag-ids={(fairForCard.tagIds ?? []).join(' ')}
+                        data-fair-id={fairForCard.id}
+                      >
+                        <FairCard fair={fairForCard} holidays={holidaySet} />
+                      </div>
+                    ))}
+                  </div>
+          
+                  {/* 2件以上ある日だけ「その他N件」トグルを出す（1件だけの日はボタン不要） */}
+                  {block.cards.length > 1 && (
+                    <button
+                      type="button"
+                      class="fair-sameday__toggle"
+                      data-sameday-toggle
+                      aria-expanded="false"
+                    >
+                      <span class="fair-sameday__toggle-open">その他{block.cards.length - 1}件のフェアを見る ＋</span>
+                      <span class="fair-sameday__toggle-close">閉じる −</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        
+          <div class="fair-list__grid">
               {visibleFairs.map(({ fair, availableSchedule }) => {
                 // 空席のある日程だけに差し替えたフェアを作る（元の fair は壊さない）。
                 // これで FairCard が表示する代表日が「一番早い・空席あり・今日以降の日」になる。
@@ -410,7 +520,7 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
                     data-open-dates={openDates}
                     data-open-weekdays={openWeekdays}
                   >
-                    <FairCard fair={fairForCard} />
+                    <FairCard fair={fairForCard} holidays={holidaySet} />
                   </div>
                 );
               })}
@@ -448,20 +558,154 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
   }
   .fair-list__grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr; /* 横長カードを縦に積むので常に1列 */
     gap: clamp(28px, 3vw, 40px);
   }
-  @media (max-width: 900px) {
-    .fair-list__grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
+  /* ▼900px時の2列指定は不要になったので削除（横長カードは常に1列のため）。
+     600px以下の gap 調整ブロックはそのまま残す。 */
   @media (max-width: 600px) {
     .fair-list__grid {
       grid-template-columns: 1fr;
       gap: 48px;
     }
   }
+  
+  /* ===== 案X：同一日開催フェアのまとめ（日付ごと・折りたたみ） ===== */
+  .fair-sameday {
+    display: none;
+    margin-bottom: clamp(28px, 4vw, 44px);
+  }
+  .fair-sameday.is-active {
+    display: block;
+  }
+  .fair-sameday__block {
+    display: none;
+    margin-bottom: 20px;
+    border: 1px solid var(--bronze);
+    background: var(--white);
+  }
+  .fair-sameday__block.is-current {
+    display: flex;
+    flex-direction:column;
+  }
+  .fair-sameday__block:last-child {
+    margin-bottom: 0;
+  }
+  .fair-sameday__rail {
+    flex: 0 0 84px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    padding: .5rem 8px .5rem 1rem;
+    border-right: 1px solid var(--hairline-green);
+    background: var(--off-white);
+    color: var(--charcoal);
+  }
+  .fair-sameday__rail.is-sat {
+    color: #3f6fb0;
+  }
+  .fair-sameday__rail.is-sun {
+    color: var(--red);
+  }
+  .fair-sameday__railmd {
+    font-family: var(--font-en-display);
+    font-size: 2.6rem;
+    line-height: .7;
+    
+  }
+  .fair-sameday__railwd {
+    font-family: var( --font-jp-serif);
+    font-size: 1.3rem;
+    padding:1.5rem 0 0 .6rem;
+  }
+  
+  .fair-sameday__railyear,
+  .fair-sameday__railslash {
+    
+  }
+  .fair-sameday__railyear{
+    font-size: 0.7em;
+    display:block;
+  }
+  .fair-sameday__railslash {
+    font-size: 0.9em;
+    padding:0 .3rem;
+  }
+  .fair-sameday__content {
+    flex: 1;
+    min-width: 0;
+    padding: 16px;
+  }
+  .fair-sameday__cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  :global(.fair-sameday__card) {
+    max-width: none;
+  }
+  
+  :global(.fair-sameday__card .fair-card__date){
+    display: none;
+  }
+  .fair-sameday__card--extra {
+    display: none;
+  }
+  .fair-sameday__cards.is-open .fair-sameday__card--extra {
+    display: block;
+  }
+  .fair-sameday__toggle {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 10px;
+    background: var(--bronze);
+    border: 1px solid var(--hairline-green);
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--white);
+    cursor: pointer;
+  }
+  .fair-sameday__toggle-close {
+    display: none;
+  }
+  .fair-sameday__toggle[aria-expanded='true'] .fair-sameday__toggle-open {
+    display: none;
+  }
+  .fair-sameday__toggle[aria-expanded='true'] .fair-sameday__toggle-close {
+    display: inline;
+  }
+
+  .fair-sameday__block.is-tagfiltered .fair-sameday__card--extra {
+    display: block;
+  }
+  .fair-sameday__block.is-tagfiltered .fair-sameday__toggle {
+    display: none;
+  }
+  .fair-sameday__card.is-hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 600px) {
+    .fair-sameday__block.is-current {
+      flex-direction: column;
+    }
+    .fair-sameday__rail {
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: 8px;
+      border-right: none;
+      border-bottom: 1px solid var(--hairline-green);
+    }
+  }
+  
+  /* 日付選択中は、重複して見える通常のフェア一覧グリッドを隠す（案X） */
+  .fair-list__grid.is-date-mode {
+    display: none;
+  }
+
 
   /* ===== フィルタ全体（左：カレンダー／右：タグ） ===== */
   .fair-filter {
@@ -525,6 +769,21 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
   }
   .fair-filter__weekdays {
     margin-top: 20px;
+  }
+  .fair-filter__weekdays.is-locked {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+  
+  .fair-filter__weekdays-note {
+    display: none;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #888;
+  }
+  
+  .fair-filter__weekdays.is-locked + .fair-filter__weekdays-note {
+    display: block;
   }
   .fair-filter__chip.is-disabled {
     cursor: default;
@@ -754,6 +1013,8 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     padding: 1rem;
     background: var(--off-white);
   }
+  
+  
 </style>
 
 <script>
@@ -778,6 +1039,8 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     const weekdayCheckboxes = Array.from(
       filter.querySelectorAll<HTMLInputElement>('.fair-filter__weekday-checkbox'),
     );
+    // 曜日セクション全体のラッパー。日付モード中にまとめてグレーアウト＋操作不可にするために使う（A案）
+    const weekdaySection = filter.querySelector<HTMLElement>('.fair-filter__weekdays');
     // 解除ボタン・要約・件数は「追従バー」側（フィルタ枠の外）へ移したので document から取る
     const clearBtn = document.querySelector<HTMLButtonElement>('[data-fair-clear]');
     const items = Array.from(grid.querySelectorAll<HTMLElement>('.fair-list__item'));
@@ -795,6 +1058,14 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
     const summaryWeekdays = document.querySelector<HTMLElement>('[data-summary-weekdays]');
     const summaryTags = document.querySelector<HTMLElement>('[data-summary-tags]');
     const countEl = document.querySelector<HTMLElement>('[data-fair-count]');
+    // 同日まとめブロック（案X）。ラッパー・各日付ブロック・折りたたみボタンを取得しておく。
+    const samedayWrap = document.querySelector<HTMLElement>('[data-fair-sameday]');
+    const samedayBlocks = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-sameday-date]'),
+    );
+    const samedayToggles = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[data-sameday-toggle]'),
+    );
     
     // 曜日番号（'0'〜'6'）→ 表示名（日〜土）の対応表。要約に「水, 金」のように名前で出すため。
     const WEEKDAY_LABELS: Record<string, string> = {
@@ -839,8 +1110,27 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
 
     // --- 現在の選択状態で表示を更新 ---
     const apply = () => {
-      // タグ：判定用は id、表示用はラベル（チェックボックスの隣の span のテキスト）を取る
-      const selectedTags = checkboxes.filter((c) => c.checked).map((c) => c.value);
+      // ▼A案：日付を選んでいる間は「曜日での絞り込み」を無効化する。
+      // 「土曜を選んだ状態で月曜チップを押す」と必ず0件になるような、
+      // 日付と曜日の不自然な組み合わせを防ぐため。日付を1つでも選ぶと日付モードに入る。
+      const dateMode = selectedDates.size > 0;
+      // 曜日セクション全体をグレーアウト＋クリック不可にする（見た目は CSS 側の .is-locked が担当）
+      if (weekdaySection) weekdaySection.classList.toggle('is-locked', dateMode);
+      // 各曜日チェックボックスの状態を、日付モードかどうかで切り替える
+      weekdayCheckboxes.forEach((c) => {
+        if (dateMode) {
+          c.checked = false; // 日付モードに入ったら、選んでいた曜日はいったん解除する
+          c.disabled = true; // キーボード操作でも触れないよう無効化する
+        } else {
+          // 日付モードを抜けたら再び有効化。ただし「そもそも空席が無い曜日」は
+          // ビルド時にラベルへ is-disabled が付いているので、その曜日は無効のまま保つ。
+          const label = c.closest('label');
+          c.disabled = label?.classList.contains('is-disabled') ?? false;
+        }
+      });
+
+    // タグ：判定用は id、表示用はラベル（チェックボックスの隣の span のテキスト）を取る
+    const selectedTags = checkboxes.filter((c) => c.checked).map((c) => c.value);
       const selectedTagLabels = checkboxes
         .filter((c) => c.checked)
         .map((c) => c.closest('label')?.querySelector('span')?.textContent?.trim() ?? c.value);
@@ -857,12 +1147,9 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
         item.classList.toggle('is-hidden', !show);
         if (show) visibleCount += 1;
       });
-    
-      if (noResult) noResult.hidden = visibleCount > 0;
-    
-      // 件数
-      if (countEl) countEl.textContent = String(visibleCount);
-    
+      // ※件数と「該当なし」の表示は、A（グリッド）/B（日付ブロック）で出し方が変わるため
+      //   apply() の末尾でモードごとにまとめて更新する（ここでは計算だけ）。
+
       // 開催日：選んだ日付を 'YYYY/M/D' で列挙（未選択なら「すべて」）
       if (summaryDates) {
         if (selectedDates.size === 0) {
@@ -879,16 +1166,79 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
         }
       }
     
-      // 曜日：選んだ曜日名を列挙
+      // 曜日：選んだ曜日名を列挙。
+      // ただし日付モード中は曜日で絞り込めない（A案でロック済み）ので、
+      // 「すべて」ではなく「---」を出して『この軸は今使っていない』ことを示す。
       if (summaryWeekdays) {
-        summaryWeekdays.textContent =
-          selectedWeekdayLabels.length === 0 ? 'すべて' : selectedWeekdayLabels.join(', ');
+        if (dateMode) {
+          summaryWeekdays.textContent = '---'; // 日付モード中は曜日の絞り込みは無効
+        } else {
+          summaryWeekdays.textContent =
+            selectedWeekdayLabels.length === 0 ? 'すべて' : selectedWeekdayLabels.join(', ');
+        }
       }
     
       // フェア内容：選んだタグ名を列挙
-      if (summaryTags) {
-        summaryTags.textContent =
-          selectedTagLabels.length === 0 ? 'すべて' : selectedTagLabels.join(', ');
+        if (summaryTags) {
+          summaryTags.textContent =
+            selectedTagLabels.length === 0 ? 'すべて' : selectedTagLabels.join(', ');
+        }
+      
+        // --- 同日まとめブロックの表示更新（案X：タグ・曜日の絞り込みを連動） ---
+      // タグを1つでも選んでいる間は、ブロック内を「代表＋折りたたみ」ではなく
+      // 「タグに合うカードを全部フラット表示」に切り替える（is-tagfiltered）。
+      const tagMode = selectedTags.length > 0;
+      // B側に実際に表示されるフェアの数（同じフェアが複数日に出ても data-fair-id で1回だけ数える）。
+      const samedayFairIds = new Set<string>();
+      let anySameday = false;
+
+samedayBlocks.forEach((block) => {
+        const date = block.dataset.samedayDate || '';
+        // ※割り切り：特定日を選んだら曜日チップは無視する。よってブロック側では曜日を見ない
+        //   （weekday / weekdayOk はここでは使わないので定義ごと削除した）。
+      
+        // 日付が選ばれているか
+        const dateSelected = selectedDates.has(date);
+      
+        // このブロック内のカードをタグでフィルタ（AND）。残った枚数を数える。
+        const cards = Array.from(
+          block.querySelectorAll<HTMLElement>('.fair-sameday__card'),
+        );
+        let visibleCards = 0;
+        cards.forEach((card) => {
+          // カードが持つタグ集合。選んだタグを「すべて」含むか（AND）
+          const own = new Set((card.dataset.tagIds || '').split(' ').filter(Boolean));
+          const tagOk = selectedTags.every((id) => own.has(id));
+          card.classList.toggle('is-hidden', !tagOk);
+          if (tagOk) {
+            visibleCards += 1;
+            // 件数の重複防止：実際に表示されるフェアのIDを集める（曜日は見ない）
+            if (dateSelected) samedayFairIds.add(card.dataset.fairId || '');
+          }
+        });
+      
+        // ブロックを出す条件：日付が選択済み・タグで残ったカードが1枚以上（曜日は条件から外した）
+        const showBlock = dateSelected && visibleCards > 0;
+        block.classList.toggle('is-current', showBlock);
+        // タグ絞り込み中は折りたたみを解除して全件フラット表示
+        block.classList.toggle('is-tagfiltered', tagMode);
+        if (showBlock) anySameday = true;
+      });
+      if (samedayWrap) samedayWrap.classList.toggle('is-active', anySameday);
+
+    // 案X：日付を1つでも選んでいる間は、通常グリッドを隠して日付ブロックだけ見せる。
+      // （dateMode は apply() 冒頭で算出済みなので、ここでは再宣言せず使い回す）
+      grid.classList.toggle('is-date-mode', dateMode);
+
+      // 件数と「該当なし」をモードごとに確定させる。
+      if (dateMode) {
+        // B（日付ブロック）モード：ブロック側の実表示から決める
+        if (countEl) countEl.textContent = String(samedayFairIds.size);
+        if (noResult) noResult.hidden = anySameday; // 表示ブロックが0件なら該当なしを出す
+      } else {
+        // A（通常グリッド）モード：従来どおりグリッドの表示枚数で判定
+        if (countEl) countEl.textContent = String(visibleCount);
+        if (noResult) noResult.hidden = visibleCount > 0;
       }
     };
 
@@ -910,6 +1260,8 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
       cell.addEventListener('click', () => {
         const date = cell.dataset.date || '';
         if (!date) return;
+        // すでに選択済みなら解除、未選択なら追加（トグル）。
+        // Set への add/delete と、マスの見た目（is-selected）を必ずセットで切り替える。
         if (selectedDates.has(date)) {
           selectedDates.delete(date);
           cell.classList.remove('is-selected');
@@ -917,7 +1269,7 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
           selectedDates.add(date);
           cell.classList.add('is-selected');
         }
-        apply();
+        apply(); // 選択状態が変わったので表示を更新
       });
     });
 
@@ -925,7 +1277,23 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
    checkboxes.forEach((c) => c.addEventListener('change', apply));
    
    // --- 曜日のチェック変更で反映 ---
-   weekdayCheckboxes.forEach((c) => c.addEventListener('change', apply));
+    weekdayCheckboxes.forEach((c) => c.addEventListener('change', apply));
+   
+     // --- 同日ブロックの「その他N件」折りたたみ開閉（案X） ---
+     // ブロックはビルド時に静的に出力済みなので、リスナーは読み込み時に一度だけ付ければよい。
+     samedayToggles.forEach((btn) => {
+       btn.addEventListener('click', () => {
+         // 押したボタンと同じブロック内のカード群(.fair-sameday__cards)を探して開閉する
+         const cards = btn
+           .closest('.fair-sameday__content')
+           ?.querySelector('.fair-sameday__cards');
+         if (!cards) return;
+         const willOpen = !cards.classList.contains('is-open');
+         cards.classList.toggle('is-open', willOpen);
+         // aria-expanded を切り替え（CSSがこの値でボタンの文言を出し分ける）
+         btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+       });
+     });
 
     // --- 「条件を解除する」：タグ・日付をすべてリセットし、最初の月に戻す ---
     if (clearBtn) {
@@ -934,6 +1302,11 @@ while (iterYear < endYear || (iterYear === endYear && iterMonth <= endMonth)) {
         weekdayCheckboxes.forEach((c) => (c.checked = false)); // 曜日もリセット
         selectedDates.clear();
         dayCells.forEach((cell) => cell.classList.remove('is-selected'));
+        // 同日ブロックの折りたたみも初期状態(閉じ)に戻す（案X）
+        document
+          .querySelectorAll('.fair-sameday__cards')
+          .forEach((cards) => cards.classList.remove('is-open'));
+        samedayToggles.forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
         showMonth(0);
         apply();
       });

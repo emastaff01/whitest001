@@ -578,8 +578,12 @@ const events = fair.schedule.flatMap((day) =>
     font-family: var(--font-jp-sans);
     transition: background-color 0.2s ease, border-color 0.2s ease;
   }
+  
   :global(.fair-sched__time:hover:not(:disabled)) {
-    background-color: var(--off-white);
+    background-color: var(--green);
+  }
+  :global(.fair-sched__time:hover:not(:disabled) span) {
+    color: var(--white);
   }
   :global(.fair-sched__time.is-active) {
     border: 1px solid var(--green);

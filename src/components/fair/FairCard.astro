@@ -15,8 +15,9 @@ import { getTaxonomyMap } from '../../lib/getTaxonomies';
 interface Props {
   fair: Fair;
   compact?: boolean; // true で簡易表示（写真・日付・タイトル・ボタンのみ）。既定 false ＝全項目表示
+  holidays?: Set<string>; // 祝日集合（'YYYY-MM-DD'）。渡されたときだけ日付を土青・日祝赤に色付けする
 }
-const { fair, compact = false } = Astro.props; // 渡されなければ compact は false
+const { fair, compact = false, holidays } = Astro.props; // holidays 未指定なら色付けなし
 
 // フェアタグ：id → ラベルに変換（マスターに無い／非公開の id は除外）
 const fairTagMap = getTaxonomyMap('fair-tags');
@@ -31,12 +32,22 @@ const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
 
 // 日付フォーマット（YYYY-MM-DD → YYYY.MM.DD + 曜日）
 const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+// 日付を「YYYY.MM.DD」と曜日に整形する。
+// new Date(iso) だと "YYYY-MM-DD" が UTC 解釈され、ビルド環境によって曜日が1日ズレうる（§7）。
+// そこで文字列を split で分解し、曜日は Date.UTC(...).getUTCDay() で安全に求める。
 function formatDate(iso: string) {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return { display: `${y}.${m}.${day}`, weekday: WEEKDAYS_JA[d.getDay()] };
+  const [yRaw, mRaw, dRaw] = iso.split('-'); // 文字列のまま分解（"2026-9-22" の非ゼロ埋めも許容）
+  const y = yRaw ?? '';
+  const m = (mRaw ?? '').padStart(2, '0'); // 9 -> 09 と桁をそろえる
+  const day = (dRaw ?? '').padStart(2, '0');
+  // 曜日番号（0=日〜6=土）。UTC基準なので JST とズレない
+  const wdNum = new Date(Date.UTC(Number(y), Number(m) - 1, Number(day))).getUTCDay();
+  return {
+    display: `${y}.${m}.${day}`,
+    weekday: WEEKDAYS_JA[wdNum],
+    key: `${y}-${m}-${day}`, // 祝日集合（YYYY-MM-DD）と突き合わせる用
+    wdNum,
+  };
 }
 
 // schedule から「最も早い開催日」と「他の日程数」を求める
@@ -44,6 +55,18 @@ const sortedDays = [...fair.schedule].sort((a, b) => (a.date < b.date ? -1 : 1))
 const firstDate = sortedDays[0]?.date;
 const fmt = formatDate(firstDate);
 const otherCount = sortedDays.length - 1;
+// 日付の文字色クラスを決める。
+// holidays を渡されたときだけ色付け（未指定＝TOP・施設の compact では無色）。
+// 日曜(0) と祝日 → 赤（is-sun）、土曜(6) → 青（is-sat）。祝日は holidays 集合で判定。
+const isHoliday = holidays?.has(fmt.key) ?? false;
+const dateColor =
+  holidays === undefined
+    ? '' // 色付けを渡されていない → 無色
+    : fmt.wdNum === 0 || isHoliday
+      ? 'is-sun'
+      : fmt.wdNum === 6
+        ? 'is-sat'
+        : '';
 ---
 
 <article class:list={['fair-card', { 'fair-card--compact': compact }]}>
@@ -62,7 +85,12 @@ const otherCount = sortedDays.length - 1;
       </picture>
     </div>
     <div class="fair-card__text">
-      <div class="fair-card__date">
+      <div
+  class:list={[
+    'fair-card__date',
+    { 'is-sat': dateColor === 'is-sat', 'is-sun': dateColor === 'is-sun' },
+  ]}
+>
         <span class="fair-card__date-num">{fmt.display}</span>
         <span class="fair-card__date-sub">（{fmt.weekday}）</span>
         {otherCount > 0 && <span class="fair-card__date-more">他 {otherCount} 日程</span>}
@@ -207,6 +235,46 @@ const otherCount = sortedDays.length - 1;
     font-size: clamp(0.95rem, 1.5vw, 1.05rem);
   }
   .fair-card--compact .fair-card__text {
-    padding-top: 16px;
+      padding-top: 16px;
+    }
+  
+  .fair-card__date.is-sat .fair-card__date-num,
+  .fair-card__date.is-sat .fair-card__date-sub {
+    color: #3f6fb0;
   }
-</style>
+  .fair-card__date.is-sun .fair-card__date-num,
+  .fair-card__date.is-sun .fair-card__date-sub {
+    color: var(--red);
+  }
+  
+    /* ▼PC幅（769px以上）でだけ、カードを「左：写真／右：情報」の横並びにする。
+       compact 表示（TOPページ・施設ページの FairSection compact）は対象外＝従来どおり縦積み。 */
+    @media (min-width: 769px) {
+      /* カード全体（a要素）を横並びコンテナにする */
+      .fair-card:not(.fair-card--compact) .fair-card__link {
+        display: flex;
+        align-items: stretch; /* 写真と情報の高さをそろえる */
+      }
+      /* 左：写真エリア。幅を固定比率にし、縮まないようにする */
+      .fair-card:not(.fair-card--compact) .fair-card__media {
+        flex: 0 0 42%; /* 幅42%で固定（伸縮しない）。数値を変えると写真の割合が変わる */
+        overflow: hidden;
+      }
+      /* 写真を枠いっぱいに敷き詰める（縦横比が違っても隙間なく埋める） */
+      .fair-card:not(.fair-card--compact) .fair-card__media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* 枠に合わせてトリミング。縦横比は保ったまま隙間を作らない */
+      }
+      /* 右：情報エリア。残り幅を使い、上下中央に寄せる */
+      .fair-card:not(.fair-card--compact) .fair-card__text {
+        flex: 1; /* 残りの幅をすべて使う */
+        min-width: 0; /* flex内で文字がはみ出さないためのおまじない */
+        padding-top: 0; /* 縦積み時の上余白を消す */
+        padding-left: clamp(20px, 2.5vw, 36px); /* 写真と情報の間の余白 */
+        display: flex;
+        flex-direction: column;
+        justify-content: center; /* 情報を上下中央に配置 */
+      }
+    }
+  </style>
