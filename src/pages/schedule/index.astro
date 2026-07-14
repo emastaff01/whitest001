@@ -5,6 +5,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { url } from '../../lib/url';
 
 const { steps } = scheduleData;
+
+// 画像パス（base 付き安全連結）。他ページと同じ作り方。
+// url() は画面内リンク専用なので画像には使わず、この toAssetPath を使う（§2・§7）
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const toAssetPath = (src: string) => `${base}${src}`;
+const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
 ---
 
 <BaseLayout title="結婚式までのスケジュール | ホワイトハウス伊万里">
@@ -39,15 +45,38 @@ const { steps } = scheduleData;
 
           {/* コンテンツ */}
           <div class="sch-step__body">
-            <p class="sch-step__period">{step.period}</p>
-            <h2 class="sch-step__title">{step.title}</h2>
-            <p class="sch-step__desc">{step.description}</p>
-            {step.tips && (
-              <p class="sch-step__tips">
-                <span class="sch-step__tips-label">ポイント</span>
-                {step.tips}
-              </p>
-            )}
+
+            {/* 左：テキスト（従来の中身をそのまま包んだだけ） */}
+            <div class="sch-step__text">
+              <p class="sch-step__period">{step.period}</p>
+              <h2 class="sch-step__title">{step.title}</h2>
+              <p class="sch-step__desc">{step.description}</p>
+              {step.tips && (
+                <p class="sch-step__tips">
+                  <span class="sch-step__tips-label">ポイント</span>
+                  {step.tips}
+                </p>
+              )}
+            </div>
+
+            {/* 右：画像。flow01.jpg〜flow09.jpg をステップ番号 i+1 に対応させて出す */}
+            <div class="sch-step__image">
+              <picture>
+                <source
+                  type="image/webp"
+                  srcset={toWebpPath(`/images/schedule/flow${String(i + 1).padStart(2, '0')}.jpg`)}
+                />
+                <img
+                  src={toAssetPath(`/images/schedule/flow${String(i + 1).padStart(2, '0')}.jpg`)}
+                  alt={step.title}
+                  width="800"
+                  height="600"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+            </div>
+
           </div>
 
         </li>
@@ -167,8 +196,35 @@ const { steps } = scheduleData;
       /* バッジ行とライン行をまとめて使う */
       grid-row: 1 / 3;
       padding-bottom: 2.5rem;
+      display: flex;
+      gap: clamp(1rem, 2.5vw, 1.75rem);
+      align-items: flex-start;
     }
-    /* 最後のステップはpaddingを減らす */
+    .sch-step__text {
+      flex: 1;
+      min-width: 0;
+    }
+    .sch-step__image {
+      flex: 0 0 38%;
+    }
+    .sch-step__image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: var(--radius, 2px);
+    }
+    @media (max-width: 600px) {
+      .sch-step__body {
+        flex-direction: column;
+      }
+      .sch-step__image {
+        flex: none;
+        width: 100%;
+      }
+    }
+    
     .sch-step--last .sch-step__body {
       padding-bottom: 0;
     }
