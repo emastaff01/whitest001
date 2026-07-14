@@ -12,8 +12,8 @@
 import { getPlans } from '../../lib/getPlans';
 import { url } from '../../lib/url';
 import PlanCard from '../plan/PlanCard.astro';
-
-const plans = getPlans();
+// TOP では先頭3件だけ表示（getPlans 自体は無改修なので /plan/ 一覧は全件のまま）
+const plans = getPlans().slice(0, 3);
 
 // ---- セクション見出し（仮・編集可）----
 const overline = 'PLAN';

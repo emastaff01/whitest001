@@ -81,7 +81,7 @@ const intro = ['ホワイトハウス伊万里で叶ったウェディングの�
 
   .report__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: clamp(28px, 3vw, 40px);
   }
 
@@ -109,15 +109,10 @@ const intro = ['ホワイトハウス伊万里で叶ったウェディングの�
     color: var(--charcoal);
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 768px) {
     .report__grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  @media (max-width: 600px) {
-    .report__grid {
-      grid-template-columns: 1fr;
-      gap: 48px;
+      grid-template-columns: 1fr; /* プランと同じ区切り（768px）で1列へ */
+      gap: 56px;
     }
   }
 </style>

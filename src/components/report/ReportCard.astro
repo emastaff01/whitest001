@@ -143,4 +143,9 @@ const toDisplayDate = (iso?: string) => (iso ? iso.replaceAll('-', '.') : '');
 	font-size: 0.82rem;
 	color: var(--green);
   }
+  :global(.report-card__media img){
+	width:100%;
+	aspect-ratio:4/3;
+	object-fit:cover;
+	}
 </style>

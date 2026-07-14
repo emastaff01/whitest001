@@ -2,19 +2,20 @@
 // =============================================================
 // CuisineSection.astro  （TOPページ / CUISINEセクション）
 // -------------------------------------------------------------
-// ・料理紹介セクション。
-// ・現時点では料理写真が手元に無いため、テキスト主体の静謐な構成にしている。
-//   将来クライアントから料理写真が提供されたら、CHAPELやBANQUETと同じく
-//   2カラム（画像＋テキスト）に拡張する想定。
-// ・末尾に詳細ページ /cuisine/（後セッションで実装）への導線。
+// ・料理紹介セクション。CHAPEL と同じ「左写真／右テキスト」の2カラム構成。
+// ・画像は public/images/cuisine/cuisineTOP.jpg（同名 .webp は build/watch:img で自動生成）。
+// ・末尾に詳細ページ /cuisine/ への導線。
 // ・文言は仮。上司・クライアント確認後に差し替えてください。
 // =============================================================
-
 import { url } from '../../lib/url';
+
+// 画像パス。base（/test-whi）末尾スラッシュの有無に依存しないよう正規化する（CHAPEL と同じ流儀）。
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const cuisineDir = `${base}/images/cuisine/`;
 
 // ---- 本文（仮・編集可）----
 const overline = 'CUISINE';
-const headline = '邸宅で仕上げる、季節のひと皿';
+const headline = ['邸宅で仕上げる、季節のひと皿']; // CHAPEL に合わせ配列化（<br> を入れて2行にもできる）
 const bodyParagraphs = [
   '邸宅内の厨房で、ひと皿ずつ温度と時間を整え、最良の状態で席にお運びします。',
   '食材は地の産地から、季節のうつろいに沿って選びます。',
@@ -24,15 +25,33 @@ const bodyParagraphs = [
 
 <section class="cuisine" aria-labelledby="cuisine-heading">
   <div class="cuisine__inner">
-    <p class="cuisine__overline">{overline}</p>
-    <h2 id="cuisine-heading" class="cuisine__headline">{headline}</h2>
-    <div class="cuisine__body">
-      {/* set:html により <br /> 等のHTMLを文字列内に書ける */}
-      {bodyParagraphs.map((p) => <p set:html={p} />)}
+    {/* 左：写真。CHAPEL と同じく picture で jpg＋webp を出し分け */}
+    <div class="cuisine__media reveal">
+      <picture>
+        <source type="image/webp" srcset={`${cuisineDir}cuisineTOP.webp`} />
+        <img
+          src={`${cuisineDir}cuisineTOP.jpg`}
+          alt="季節の食材で仕上げた料理の一皿"
+          width="1600"
+          height="1067"
+          loading="lazy"
+          decoding="async"
+        />
+      </picture>
     </div>
-    <p class="cuisine__more">
-      <a href={url('/cuisine/')}>料理について見る</a>
-    </p>
+
+    {/* 右：テキスト */}
+    <div class="cuisine__text">
+      <p class="cuisine__overline">{overline}</p>
+      <h2 id="cuisine-heading" class="cuisine__headline">{headline.map((p) => <p set:html={p} />)}</h2>
+      <div class="cuisine__body">
+        {/* set:html により <br /> 等のHTMLを文字列内に書ける。文言は固定値なので安全 */}
+        {bodyParagraphs.map((p) => <p set:html={p} />)}
+      </div>
+      <p class="cuisine__more">
+        <a href={url('/cuisine/')}>料理について見る</a>
+      </p>
+    </div>
   </div>
 </section>
 
@@ -42,10 +61,18 @@ const bodyParagraphs = [
     padding-block: var(--space-section-y);
   }
   .cuisine__inner {
-    max-width: var(--maxw-narrow);
+    max-width: var(--maxw-content);
     margin-inline: auto;
     padding-inline: var(--space-section-x);
-    text-align: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+  }
+  .cuisine__media img {
+    display: block;
+    width: 100%;
+    height: auto;
   }
   .cuisine__overline {
     font-family: var(--font-en-label);
@@ -53,15 +80,15 @@ const bodyParagraphs = [
     font-size: 0.72rem;
     letter-spacing: 0.18em;
     color: var(--green);
-    margin-bottom: 28px;
+    margin-bottom: 24px;
   }
   .cuisine__headline {
     font-family: var(--font-jp-serif);
     font-weight: var(--weight-light);
-    font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
     line-height: 1.5;
     color: var(--charcoal);
-    margin-bottom: 48px;
+    margin-bottom: 32px;
   }
   .cuisine__body {
     font-family: var(--font-jp-sans);
@@ -74,7 +101,7 @@ const bodyParagraphs = [
     margin-top: 1.4em;
   }
   .cuisine__more {
-    margin-top: 56px;
+    margin-top: 40px;
   }
   .cuisine__more a {
     font-family: var(--font-jp-sans);
@@ -94,5 +121,12 @@ const bodyParagraphs = [
   }
   .cuisine__more a:hover::after {
     color: var(--charcoal);
+  }
+
+  @media (max-width: 768px) {
+    .cuisine__inner {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
   }
 </style>

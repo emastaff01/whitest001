@@ -13,10 +13,13 @@ import FairCard from '../fair/FairCard.astro';
 
 interface Props {
   compact?: boolean; // true で各カードを簡易表示。既定 false ＝TOP従来表示
+  limit?: number;    // 表示件数の上限。渡されたときだけ先頭 limit 件に絞る（TOP用）。未指定＝全件（施設ページは従来どおり）
 }
-const { compact = false } = Astro.props; // 渡されなければ false（＝TOPは無改修）
+const { compact = false, limit } = Astro.props; // limit 未指定なら undefined
+// limit があるときだけ先頭 limit 件に絞る。getFairs は sortOrder 昇順なので「先頭から limit 件」。
+// getFairs 自体は無改修なので /fair/ 一覧ページは全件のまま。
+const fairs = limit ? getFairs().slice(0, limit) : getFairs();
 
-const fairs = getFairs();
 // ---- セクション見出し（仮・編集可）----
 const overline = 'FAIR'; // overline も変えたい場合は同じ要領で compact ? ... : ... にする
 const headline = compact
