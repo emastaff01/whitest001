@@ -11,8 +11,12 @@ import PageHeader from '../../components/common/PageHeader.astro';
 import ReportCard from '../../components/report/ReportCard.astro';
 import CtaSection from '../../components/common/CtaSection.astro';
 import { getReports } from '../../lib/getReports';
-
+import { getTaxonomies } from '../../lib/getTaxonomies';   // タグ一覧取得のため追加
 const reports = getReports();
+
+// チップに出す「レポートタグ」の一覧（公開中・sortOrder昇順で返る＝引退タグは自動除外）
+// これをそのままチップ表示に使う。0件ならチップ枠ごと出さない。
+const reportTagList = getTaxonomies('report-tags');
 ---
 
 <BaseLayout
@@ -26,17 +30,49 @@ const reports = getReports();
   />
 
   <section class="report-list">
-    <div class="report-list__inner reveal">
-      {
-        reports.length === 0 ? (
-          <p class="report-list__empty">現在ご紹介できるレポートはありません。</p>
-        ) : (
-          <div class="report-list__grid">
-            {reports.map((report) => <ReportCard report={report} />)}
-          </div>
-        )
-      }
-    </div>
+  <div class="report-list__inner reveal">
+  
+    {/* 絞り込みチップ（対象タグが1件以上あるときだけ表示） */}
+    {reportTagList.length > 0 && (
+      <div class="report-filter">
+        <ul class="report-filter__chips">
+          {reportTagList.map((tag) => (
+            <li>
+              <label class="report-filter__chip">
+                {/* value に rt- の id を入れる。JSがこれを集めて判定する */}
+                <input type="checkbox" class="report-filter__checkbox" value={tag.id} />
+                <span>{tag.label}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {/* 何か選んだときだけJSで表示。初期は hidden */}
+        <button type="button" class="report-filter__clear" hidden>
+          条件を解除する
+        </button>
+      </div>
+    )}
+  
+    {
+      reports.length === 0 ? (
+        <p class="report-list__empty">現在ご紹介できるレポートはありません。</p>
+      ) : (
+        <div class="report-list__grid">
+          {reports.map((report) => (
+            <div class="report-list__item" data-tag-ids={(report.tagIds ?? []).join(' ')}>
+              <ReportCard report={report} />
+            </div>
+          ))}
+        </div>
+      )
+    }
+  
+    {/* 絞り込みで0件になったときのメッセージ。初期は hidden、JSで出し隠し */}
+    <p class="report-list__noresult" hidden>
+      条件に合うレポートがありません。
+    </p>
+  
+  </div>
   </section>
 
   <CtaSection />
@@ -64,6 +100,79 @@ const reports = getReports();
     grid-template-columns: 1fr 1fr 1fr;
     gap: clamp(28px, 3vw, 40px);
   }
+  :global(.report-card__media img){
+  width:100%;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  }
+  
+  .report-filter {
+    margin-bottom: clamp(28px, 3vw, 40px);
+  }
+  .report-filter__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .report-filter__chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 18px;
+    border: 1px solid var(--bronze);
+    border-radius: 999px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--bronze);
+    background-color: var(--white);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .report-filter__checkbox {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .report-filter__chip:not(:has(.report-filter__checkbox:checked)):hover {
+    background-color: color-mix(in srgb, var(--bronze) 12%, #fff);
+  }
+  .report-filter__chip:has(.report-filter__checkbox:checked) {
+    background-color: var(--bronze);
+    color: var(--white);
+  }
+  .report-filter__clear {
+    margin-top: 16px;
+    padding: 6px 16px;
+    border: 1px solid var(--gray);
+    border-radius: 999px;
+    background-color: transparent;
+    font-family: var(--font-jp-sans);
+    font-size: 0.8rem;
+    color: var(--gray);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .report-filter__clear:hover {
+    border-color: var(--bronze);
+    color: var(--bronze);
+  }
+  .report-list__item.is-hidden {
+    display: none !important;
+  }
+  .report-list__noresult {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--gray);
+    padding: 60px 0;
+  }
+
   @media (max-width: 900px) {
     .report-list__grid {
       grid-template-columns: 1fr 1fr;
@@ -76,3 +185,74 @@ const reports = getReports();
     }
   }
 </style>
+
+<script>
+  // レポート一覧の絞り込み（対象タグ rt- の1軸・AND判定）。
+  // 構造はプラン(plan/index.astro)と同型。型アサーションを最初から入れておく。
+  document.addEventListener('DOMContentLoaded', () => {
+    // ---- 必要な要素をまとめて取得（型付き）----
+    // チップ内のチェックボックス（複数）。<HTMLInputElement> で .checked/.value を有効化。
+    const checkboxes = Array.from(
+      document.querySelectorAll<HTMLInputElement>('.report-filter__checkbox')
+    );
+    // 各レポートカードのラッパー（data-tag-ids を持つ）
+    const items = Array.from(document.querySelectorAll('.report-list__item'));
+    // 「条件を解除する」ボタン（タグ0件だと存在しないので null もあり得る）
+    const clearBtn = document.querySelector<HTMLButtonElement>('.report-filter__clear');
+    // 0件メッセージ
+    const noResult = document.querySelector<HTMLParagraphElement>('.report-list__noresult');
+
+    // チップが無い（＝公開中タグ0件）ページでは何もしない
+    if (checkboxes.length === 0 || items.length === 0) return;
+
+    // ---- 絞り込み本体 ----
+    function apply() {
+      // 1. チェックされているタグid（rt-xxx）を集める
+      const selected = checkboxes
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.value);
+
+      // 2. 各カードを表示/非表示に振り分ける
+      let visibleCount = 0; // 表示中の件数（0件メッセージ用）
+
+      items.forEach((item) => {
+        // このカードが持つタグid配列。空文字を除いてスペース区切りで分解。
+        const tagIds = (item.getAttribute('data-tag-ids') || '')
+          .split(' ')
+          .filter(Boolean);
+
+        // 未選択なら全表示。選択時は「選んだタグを全部持つ」= AND判定。
+        const match =
+          selected.length === 0 ||
+          selected.every((id) => tagIds.includes(id));
+
+        // is-hidden クラスで出し隠し（display:none は CSS 側に定義済み）
+        item.classList.toggle('is-hidden', !match);
+        if (match) visibleCount++;
+      });
+
+      // 3. 解除ボタンの出し隠し（1つでも選ばれていれば出す）
+      if (clearBtn) {
+        clearBtn.hidden = selected.length === 0;
+      }
+
+      // 4. 0件メッセージの出し隠し
+      if (noResult) {
+        noResult.hidden = visibleCount !== 0;
+      }
+    }
+
+    // ---- イベント登録 ----
+    checkboxes.forEach((cb) => cb.addEventListener('change', apply));
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        checkboxes.forEach((cb) => (cb.checked = false));
+        apply(); // 外したあと再判定（全表示に戻る）
+      });
+    }
+
+    // 初期表示（念のため一度そろえておく）
+    apply();
+  });
+</script>

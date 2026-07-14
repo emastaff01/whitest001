@@ -34,7 +34,7 @@ const planTagList = getTaxonomies('plan-tags');
 
   <section class="plan-list">
     <div class="plan-list__inner">
-      {/* 絞り込み枠：対象スタイルのチップ（タグが1つも無ければ丸ごと出さない） */}
+      
       {
         planTagList.length > 0 && (
           <div class="plan-filter">
@@ -43,7 +43,7 @@ const planTagList = getTaxonomies('plan-tags');
               {
                 planTagList.map((tag) => (
                   <label class="plan-filter__chip">
-                    {/* value にタグの id（pt-xxx）を入れておき、JS でこれを集めて判定する */}
+                    
                     <input
                       type="checkbox"
                       class="plan-filter__checkbox"
@@ -206,15 +206,17 @@ const planTagList = getTaxonomies('plan-tags');
     document.addEventListener('DOMContentLoaded', () => {
       // ---- 必要な要素をまとめて取得 ----
       // チップ内のチェックボックス（複数）
+      // <HTMLInputElement> を付けて「チェックボックス要素の集まり」と型付けする。
+      // これで下の cb.checked / cb.value が使えるようになる。
       const checkboxes = Array.from(
-        document.querySelectorAll('.plan-filter__checkbox')
+        document.querySelectorAll<HTMLInputElement>('.plan-filter__checkbox')
       );
       // 各プランカードのラッパー（data-tag-ids を持つ）
       const items = Array.from(document.querySelectorAll('.plan-list__item'));
       // 「条件を解除する」ボタン（タグが0件だとそもそも存在しないので null もあり得る）
-      const clearBtn = document.querySelector('.plan-filter__clear');
-      // 0件メッセージ
-      const noResult = document.querySelector('.plan-list__noresult');
+      const clearBtn = document.querySelector<HTMLButtonElement>('.plan-filter__clear');
+      // <p> 要素として型付け（.hidden を使うため）。無ければ null。
+      const noResult = document.querySelector<HTMLParagraphElement>('.plan-list__noresult');
   
       // チップ自体が無い（＝公開中タグ0件）ページでは何もしない
       if (checkboxes.length === 0 || items.length === 0) return;
