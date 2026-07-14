@@ -183,19 +183,8 @@ const planTagList = getTaxonomies('plan-tags');
   }
   .plan-list__grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: clamp(28px, 3vw, 40px);
-  }
-  @media (max-width: 900px) {
-    .plan-list__grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  @media (max-width: 600px) {
-    .plan-list__grid {
-      grid-template-columns: 1fr;
-      gap: 48px;
-    }
+    grid-template-columns: 1fr; /* 常に1列。カード自体がPCで横長になるため列は分けない */
+    gap: clamp(32px, 4vw, 56px); /* カード同士の縦の間隔（横長カードは背が高いので少し広め） */
   }
 </style>
   

@@ -7,6 +7,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/common/PageHeader.astro";
 import { url } from "../../lib/url";
 import { getFairs } from "../../lib/getFairs"; 
+import { CONTACT_ENDPOINT } from "../../lib/contact"; // フォーム送信先（別式場ではこの定数を差し替え）
 
 // ビルド時に公開中フェアを取得し、{ id: 表示名 } の早見表を作る
 const fairs = getFairs(); // get〜が同期でも await を付けて問題なし（将来Firestore=非同期化にも耐える）
@@ -26,6 +27,8 @@ for (const f of fairs) {
 const pageTitle = "お問い合わせ";
 const pageDescription = "ホワイトハウス伊万里へのお問い合わせはこちらから。";
 const thanksUrl = url("/contact-fair/thanks/");
+// お問い合わせ Worker のエンドポイント（src/lib/contact.ts の定数）。別式場ではその定数を差し替える
+const contactEndpoint = CONTACT_ENDPOINT;
 ---
 
 <BaseLayout title={pageTitle} description={pageDescription}>
@@ -156,7 +159,7 @@ const thanksUrl = url("/contact-fair/thanks/");
   </section>
 </BaseLayout>
 <script type="application/json" id="fairNamesData" is:inline set:html={JSON.stringify(fairNames)}></script>
-<script is:inline define:vars={{ thanksUrl }}>
+<script is:inline define:vars={{ thanksUrl, contactEndpoint }}>
   // 送信処理を実装。HTML標準バリデーションを通った内容をJSONにまとめ、
   // 段階2でデプロイした Cloudflare Worker（受け口）へ送る。
   // JS無効時でも required / type="email" は機能する（フォールバック）。
@@ -167,9 +170,10 @@ const thanksUrl = url("/contact-fair/thanks/");
   const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
   const originalBtnText = submitBtn ? submitBtn.textContent : "";
 
-  const ENDPOINT = "https://whitehouse-imari-contact-worker.matsufuji.workers.dev";
+  // Worker のエンドポイント。frontmatter で .env から読み、define:vars でここへ渡している
+	const ENDPOINT = contactEndpoint;
   const fairNames = JSON.parse(document.getElementById("fairNamesData")?.textContent || "{}");
-  
+
 	// URL の ?fair_id=... を読み取り、hidden 項目にセットする
 	// （静的サイトはブラウザ側でしかクエリを読めないため、ここで行う）
 	const rawFairId = new URLSearchParams(location.search).get("fair_id") || "";

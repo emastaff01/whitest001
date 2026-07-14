@@ -10,12 +10,11 @@
 import type { Plan } from '../../types';
 import { url } from '../../lib/url';
 import { getTaxonomyMap } from '../../lib/getTaxonomies';
-// このカードが受け取るデータ（1件分のプラン）
 interface Props {
   plan: Plan;
+  compact?: boolean; // true で縦積み（TOP用）。既定 false ＝PCで横長（一覧ページ）
 }
-const { plan } = Astro.props;
-
+const { plan, compact = false } = Astro.props; // compact 未指定なら横長
 // 画像パス（base 付き安全連結）
 // plans.json の thumbnail.src は "/images/plans/xxx.jpg" のように
 // 先頭スラッシュ付きで入っているので、base 末尾スラッシュを除いて連結する。
@@ -40,7 +39,7 @@ const tagLabels = (plan.tagIds ?? [])
   .filter((label): label is string => Boolean(label));
 ---
 
-<article class="plan-card">
+<article class:list={['plan-card', { 'plan-card--compact': compact }]}>
   <a class="plan-card__link" href={url(`/plan/${plan.id}/`)}>
     <div class="plan-card__media">
       <picture>
@@ -94,6 +93,8 @@ const tagLabels = (plan.tagIds ?? [])
     display: block;
     color: inherit;
     transition: opacity 0.2s ease;
+    background-color: var(--off-white);
+    padding:2rem 1rem;
   }
   .plan-card__link:hover {
     opacity: 0.82;
@@ -178,13 +179,42 @@ const tagLabels = (plan.tagIds ?? [])
   .plan-card__more {
     font-family: var(--font-jp-sans);
     font-size: 0.88rem;
-    color: var(--green);
-    border-bottom: 0.5px solid var(--hairline-green);
-    padding-bottom: 4px;
+    color: var(--bronze);
+    padding:6px 10px;
     transition: color 0.2s ease, border-color 0.2s ease;
+    width:130px;
+    border-bottom:1px solid var(--bronze);
+    font-weight:bold;
+    margin:0 0 0 auto;
   }
   .plan-card__link:hover .plan-card__more {
     color: var(--charcoal);
     border-bottom-color: var(--charcoal);
+  }
+  /* PC幅（769px以上）でだけ、カードを「左：写真／右：情報」の横並びにする。
+     compact（TOP の PlanSection）は対象外＝従来どおり縦積み。FairCard と同じ流儀。 */
+  @media (min-width: 769px) {
+    .plan-card:not(.plan-card--compact) .plan-card__link {
+      display: flex;
+      align-items: stretch;
+    }
+    .plan-card:not(.plan-card--compact) .plan-card__media {
+      flex: 0 0 42%;
+      overflow: hidden;
+    }
+    .plan-card:not(.plan-card--compact) .plan-card__media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .plan-card:not(.plan-card--compact) .plan-card__text {
+      flex: 1;
+      min-width: 0;
+      padding-top: 0;
+      padding-left: clamp(20px, 2.5vw, 36px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
   }
 </style>

@@ -7,6 +7,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/common/PageHeader.astro";
 import { url } from "../../lib/url";
 import { getPlans } from "../../lib/getPlans"; 
+import { CONTACT_ENDPOINT } from "../../lib/contact"; // フォーム送信先（別式場ではこの定数を差し替え）
 
 // ビルド時に公開中フェアを取得し、{ id: 表示名 } の早見表を作る
 const plans = getPlans(); // get〜が同期でも await を付けて問題なし（将来Firestore=非同期化にも耐える）
@@ -18,6 +19,8 @@ const planNames = Object.fromEntries(
 const pageTitle = "お問い合わせ";
 const pageDescription = "ホワイトハウス伊万里へのお問い合わせはこちらから。";
 const thanksUrl = url("/contact-plan/thanks/");
+// お問い合わせ Worker のエンドポイント（src/lib/contact.ts の定数）。別式場ではその定数を差し替える
+const contactEndpoint = CONTACT_ENDPOINT;
 ---
 
 <BaseLayout title={pageTitle} description={pageDescription}>
@@ -171,7 +174,7 @@ const thanksUrl = url("/contact-plan/thanks/");
 	});
   }
 </script>
-<script is:inline define:vars={{ thanksUrl }}>
+<script is:inline define:vars={{ thanksUrl, contactEndpoint }}>
   // 送信処理を実装。HTML標準バリデーションを通った内容をJSONにまとめ、
   // 段階2でデプロイした Cloudflare Worker（受け口）へ送る。
   // JS無効時でも required / type="email" は機能する（フォールバック）。
@@ -182,8 +185,9 @@ const thanksUrl = url("/contact-plan/thanks/");
   const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
   const originalBtnText = submitBtn ? submitBtn.textContent : "";
 
-  // 段階2でデプロイした Worker のURL。自分の workers.dev のURLに置き換える
-  const ENDPOINT = "https://whitehouse-imari-contact-worker.matsufuji.workers.dev";  
+ // Worker のエンドポイント。frontmatter で .env から読み、define:vars でここへ渡している
+   const ENDPOINT = contactEndpoint;
+ 
   const planNames = JSON.parse(document.getElementById("planNamesData")?.textContent || "{}");
 const rawPlanId = new URLSearchParams(location.search).get("plan_id") || "";
 	const planId = rawPlanId.replace(/\/+$/, ""); // 末尾のスラッシュを除去してIDとして使う

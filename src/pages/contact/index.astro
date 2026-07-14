@@ -7,10 +7,13 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/common/PageHeader.astro";
 import { url } from "../../lib/url";
 // ↑ 内部リンクは必ず url() を通す（base="/test-whi" を自動付与し、リンク切れを防ぐため）
+import { CONTACT_ENDPOINT } from "../../lib/contact"; // フォーム送信先（別式場ではこの定数を差し替え）
 
 const pageTitle = "お問い合わせ";
 const pageDescription = "ホワイトハウス伊万里へのお問い合わせはこちらから。";
 const thanksUrl = url("/contact/thanks/");
+// お問い合わせ Worker のエンドポイント（src/lib/contact.ts の定数）。別式場ではその定数を差し替える
+const contactEndpoint = CONTACT_ENDPOINT;
 ---
 
 <BaseLayout title={pageTitle} description={pageDescription}>
@@ -179,7 +182,7 @@ const thanksUrl = url("/contact/thanks/");
 	toggleDate(); // ページ表示直後にも反映（初期値""なので最初は非表示）
   }
 </script>
-<script is:inline define:vars={{ thanksUrl }}>
+<script is:inline define:vars={{ thanksUrl, contactEndpoint }}>
   // 送信処理を実装。HTML標準バリデーションを通った内容をJSONにまとめ、
   // 段階2でデプロイした Cloudflare Worker（受け口）へ送る。
   // JS無効時でも required / type="email" は機能する（フォールバック）。
@@ -190,8 +193,10 @@ const thanksUrl = url("/contact/thanks/");
   const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
   const originalBtnText = submitBtn ? submitBtn.textContent : "";
 
-  // 段階2でデプロイした Worker のURL。自分の workers.dev のURLに置き換える
-  const ENDPOINT = "https://whitehouse-imari-contact-worker.matsufuji.workers.dev";
+ // Worker のエンドポイント。frontmatter で .env から読み、define:vars でここへ渡している
+   const ENDPOINT = contactEndpoint;
+   
+   
 
   if (form) {
 	form.addEventListener("submit", async (event) => {
