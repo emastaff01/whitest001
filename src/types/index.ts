@@ -192,8 +192,14 @@ export interface SiteSettings {
   nap: {
     name: string; // ホワイトハウス伊万里
     postalCode: string; // 848-0041
-    address: string; // 佐賀県伊万里市新天町520-6
+    address: string; // 佐賀県伊万里市新天町520-6（表示用の結合住所。アクセスページ等が参照）
     phone: string; // 0955-22-2021
+    // ↓ 構造化データ（JSON-LD）用の分割住所・緯度経度。表示用の address とは別役割
+    addressRegion: string; // 都道府県。例: '佐賀県'
+    addressLocality: string; // 市区町村。例: '伊万里市'
+    streetAddress: string; // 番地以降。例: '新天町520-6'
+    latitude: string; // 緯度。例: '33.275'（文字列で保持）
+    longitude: string; // 経度。例: '129.880'（文字列で保持）
   };
   businessHours: string; // 例: '10:00 - 20:00'
   closedDays: string; // 例: '毎週火曜日・水曜日（祝日除く）'

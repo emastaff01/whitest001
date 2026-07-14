@@ -48,11 +48,15 @@ const ogImageURL = new URL(`${base}${ogImage}`.replace(/\/{2,}/g, '/'), SITE_URL
 // 作り方は ogImageURL と同じ（base を付け、二重スラッシュを1つにまとめ、SITE_URL と結合）。
 const logoURL = settings.logo
   ? new URL(`${base}${settings.logo}`.replace(/\/{2,}/g, '/'), SITE_URL).href
-  : undefined;
-
-
-
-// LocalBusiness構造化データ（MEO対策）。設計資料セクション6-2に準拠。
+    : undefined;
+  
+  // 構造化データ用の電話番号を「国内表記」から「国際表記(+81)」へ変換する。
+  // nap.phone の先頭の1桁の 0 だけを +81- に置き換え、残りのハイフン区切りはそのまま活かす。
+  // 例: '0955-22-2021' → '+81-955-22-2021'
+  // nap.phone を正本にすることで、別式場では phone を1か所直せば構造化データの電話も追従する。
+  const telephoneForSchema = settings.nap.phone.replace(/^0/, '+81-');
+  
+  // LocalBusiness構造化データ（MEO対策）。設計資料セクション6-2に準拠。
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'EventVenue',
@@ -60,18 +64,18 @@ const structuredData = {
   image: ogImageURL,
   address: {
     '@type': 'PostalAddress',
-    streetAddress: '新天町520-6',
-    addressLocality: '伊万里市',
-    addressRegion: '佐賀県',
-    postalCode: settings.nap.postalCode,
-    addressCountry: 'JP',
+    streetAddress: settings.nap.streetAddress, // 正本参照（新天町520-6）
+    addressLocality: settings.nap.addressLocality, // 正本参照（伊万里市）
+    addressRegion: settings.nap.addressRegion, // 正本参照（佐賀県）
+    postalCode: settings.nap.postalCode, // 既に正本参照済み
+    addressCountry: 'JP', // 国内前提の定数。式場ごとに変わらないので直書きのまま
   },
   geo: {
     '@type': 'GeoCoordinates',
-    latitude: '33.275',
-    longitude: '129.880',
+    latitude: settings.nap.latitude, // 正本参照（33.275）
+    longitude: settings.nap.longitude, // 正本参照（129.880）
   },
-  telephone: '+81-955-22-2021',
+  telephone: telephoneForSchema, // nap.phone から組み立てた国際表記（+81-955-22-2021）
   url: homeURL, // 直書きをやめ、SITE_URL から組み立てた代表URLに統一
   logo: logoURL, // 式場ロゴ。undefined の時は JSON.stringify が自動で省くので安全
     openingHours: ['Mo-Su 10:00-20:00'],

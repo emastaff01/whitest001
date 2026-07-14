@@ -5,7 +5,12 @@
     "name": "ホワイトハウス伊万里",
     "postalCode": "848-0041",
     "address": "佐賀県伊万里市新天町520-6",
-    "phone": "0955-22-2021"
+    "phone": "0955-22-2021",
+    "addressRegion": "佐賀県",
+    "addressLocality": "伊万里市",
+    "streetAddress": "新天町520-6",
+    "latitude": "33.275",
+    "longitude": "129.880"
   },
   "businessHours": "10:00 - 20:00",
   "closedDays": "毎週火曜日・水曜日（祝日除く）",

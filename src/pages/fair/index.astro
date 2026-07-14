@@ -913,11 +913,9 @@ const sameDayBlocks = [...fairsByDate.entries()]
 /* ===== 絞り込み条件バー（ヘッダー下に追従・全幅） ===== */
   .fair-stickybar {
     position: sticky;
-    /* ヘッダー（画面上部に固定されている想定）の高さぶん下げ、その真下に貼り付ける。
-       ▼ヘッダーの実寸に合わせて数値を変える。固定ヘッダーでなければ 0px のままでよい。 */
     top: var(--header-h);
     z-index: 20;
-    background-color: rgba(94, 116, 65, 0.7);
+    background-color: color-mix(in srgb, var(--green) 70%, transparent);
     backdrop-filter:blur(3px);
     width:100%;
     margin-bottom:1rem;
