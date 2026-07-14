@@ -17,7 +17,7 @@
       "pi-coordinate"
     ],
     "tagIds": [
-      "pt-private"
+      "pt-summer"
     ],
     "isPublished": true,
     "sortOrder": 1
@@ -38,11 +38,78 @@
       "pi-coordinate"
     ],
     "tagIds": [
-      "pt-private",
+      "pt-autumn",
       "pt-small"
     ],
     "isPublished": true,
     "sortOrder": 3,
     "priceTo": 999999999
-  }
+  },
+  {
+    "id": "family-small",
+    "title": "少人数・家族ウェディング プラン",
+    "description": "ご家族やごく親しい方だけで叶える、アットホームな少人数ウェディング。20名様からご案内。",
+    "thumbnail": {
+      "src": "/images/plans/sample-plan-01.jpg",
+      "alt": "少人数ウェディングの会場"
+    },
+    "priceFrom": 850000,
+    "priceTo": 1800000,
+    "guestCountBase": 20,
+    "includeIds": [
+      "pi-ceremony",
+      "pi-reception",
+      "pi-coordinate"
+    ],
+    "tagIds": [
+      "pt-small"
+    ],
+    "isPublished": true,
+    "sortOrder": 4
+  },
+  {
+    "id": "papamama",
+    "title": "パパママ婚 プラン",
+    "description": "お子様と一緒に叶える結婚式。マタニティやお子様連れにも安心のサポート付き。",
+    "thumbnail": {
+      "src": "/images/plans/sample-plan-02.jpg",
+      "alt": "家族で楽しむ結婚式の様子"
+    },
+    "priceFrom": 1200000,
+    "priceTo": 2500000,
+    "guestCountBase": 40,
+    "includeIds": [
+      "pi-ceremony",
+      "pi-reception",
+      "pi-coordinate"
+    ],
+    "tagIds": [
+      "pt-papamama",
+      "pt-small"
+    ],
+    "isPublished": true,
+    "sortOrder": 5
+  },
+  {
+    "id": "autumn-garden",
+    "title": "秋のガーデンウェディング プラン",
+    "description": "紅葉に彩られたガーデンで叶える季節限定ウェディング。9月〜11月の挙式におすすめ。",
+    "thumbnail": {
+          "src": "/images/plans/sample-plan-03.jpg",
+          "alt": "秋のガーデン挙式の様子"
+        },
+        "priceFrom": 1650000,
+        "priceTo": 3200000,
+        "guestCountBase": 60,
+        "includeIds": [
+          "pi-ceremony",
+          "pi-reception",
+          "pi-coordinate"
+        ],
+        "tagIds": [
+          "pt-autumn"
+        ],
+        "isPublished": true,
+        "sortOrder": 6
+      }
 ]

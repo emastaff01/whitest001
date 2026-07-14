@@ -53,15 +53,36 @@
       "group": "plan-tags",
       "label": "1棟貸切ウェディング",
       "sortOrder": 1,
+      "isPublished": false
+    },
+    {
+      "id": "pt-small",
+      "group": "plan-tags",
+      "label": "少人数",
+      "sortOrder": 2,
       "isPublished": true
     },
     {
-        "id": "pt-small",
-        "group": "plan-tags",
-        "label": "少人数・家族婚",
-        "sortOrder": 2,
-        "isPublished": true
-      },
+      "id": "pt-summer",
+      "group": "plan-tags",
+      "label": "夏婚",
+      "sortOrder": 3,
+      "isPublished": true
+    },
+    {
+      "id": "pt-autumn",
+      "group": "plan-tags",
+      "label": "秋婚",
+      "sortOrder": 4,
+      "isPublished": true
+    },
+    {
+      "id": "pt-papamama",
+      "group": "plan-tags",
+      "label": "パパママ婚",
+      "sortOrder": 5,
+      "isPublished": true
+    },
       {
         "id": "ft-tour",
         "group": "fair-tags",

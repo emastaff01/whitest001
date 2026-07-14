@@ -12,8 +12,14 @@ import PageHeader from '../../components/common/PageHeader.astro';
 import PlanCard from '../../components/plan/PlanCard.astro';
 import CtaSection from '../../components/common/CtaSection.astro';
 import { getPlans } from '../../lib/getPlans';
+// 対象スタイル（plan-tags＝pt-）のマスターを取得するために使う。
+// 公開中だけ・sortOrder 昇順で返るので、引退させた pt-private は自動で除外される。
+import { getTaxonomies } from '../../lib/getTaxonomies';
 
 const plans = getPlans();
+
+// 絞り込みチップに出す対象スタイル一覧（公開中の plan-tags を sortOrder 昇順で）。
+const planTagList = getTaxonomies('plan-tags');
 ---
 
 <BaseLayout
@@ -28,15 +34,58 @@ const plans = getPlans();
 
   <section class="plan-list">
     <div class="plan-list__inner">
+      {/* 絞り込み枠：対象スタイルのチップ（タグが1つも無ければ丸ごと出さない） */}
+      {
+        planTagList.length > 0 && (
+          <div class="plan-filter">
+            <p class="plan-filter__heading">対象スタイルで絞り込む</p>
+            <div class="plan-filter__chips">
+              {
+                planTagList.map((tag) => (
+                  <label class="plan-filter__chip">
+                    {/* value にタグの id（pt-xxx）を入れておき、JS でこれを集めて判定する */}
+                    <input
+                      type="checkbox"
+                      class="plan-filter__checkbox"
+                      value={tag.id}
+                    />
+                    <span>{tag.label}</span>
+                  </label>
+                ))
+              }
+            </div>
+            {/* 選択解除ボタン。最初は非表示（何も選んでいないので）。JS で出し隠しする */}
+            <button type="button" class="plan-filter__clear" hidden>
+              条件を解除する
+            </button>
+          </div>
+        )
+      }
+
       {
         plans.length === 0 ? (
           <p class="plan-list__empty">現在ご案内中のプランはありません。</p>
         ) : (
           <div class="plan-list__grid">
-            {plans.map((plan) => <PlanCard plan={plan} />)}
+            {
+              plans.map((plan) => (
+                
+                <div
+                  class="plan-list__item"
+                  data-tag-ids={(plan.tagIds ?? []).join(' ')}
+                >
+                  <PlanCard plan={plan} />
+                </div>
+              ))
+            }
           </div>
         )
       }
+
+      
+      <p class="plan-list__noresult" hidden>
+        条件に合うプランが見つかりませんでした。
+      </p>
     </div>
   </section>
 
@@ -53,6 +102,78 @@ const plans = getPlans();
     margin-inline: auto;
     padding-inline: var(--space-section-x);
   }
+
+  .plan-filter {
+    margin-bottom: clamp(28px, 3vw, 40px);
+  }
+  .plan-filter__heading {
+    font-family: var(--font-jp-sans);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--bronze);
+    margin-bottom: 12px;
+  }
+  .plan-filter__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .plan-filter__chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 18px;
+    border: 1px solid var(--bronze);
+    border-radius: 999px;
+    font-family: var(--font-jp-sans);
+    font-size: 0.85rem;
+    color: var(--bronze);
+    background-color: var(--white);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .plan-filter__checkbox {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .plan-filter__chip:not(:has(.plan-filter__checkbox:checked)):hover {
+    background-color: color-mix(in srgb, var(--bronze) 12%, #fff);
+  }
+  .plan-filter__chip:has(.plan-filter__checkbox:checked) {
+    background-color: var(--bronze);
+    color: var(--white);
+  }
+  .plan-filter__clear {
+    margin-top: 16px;
+    padding: 6px 16px;
+    border: 1px solid var(--gray);
+    border-radius: 999px;
+    background-color: transparent;
+    font-family: var(--font-jp-sans);
+    font-size: 0.8rem;
+    color: var(--gray);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .plan-filter__clear:hover {
+    border-color: var(--bronze);
+    color: var(--bronze);
+  }
+  .plan-list__item.is-hidden {
+    display: none !important;
+  }
+  .plan-list__noresult {
+    text-align: center;
+    font-family: var(--font-jp-sans);
+    font-size: 0.95rem;
+    color: var(--gray);
+    padding: 60px 0;
+  }
+
   .plan-list__empty {
     text-align: center;
     font-family: var(--font-jp-sans);
@@ -77,3 +198,78 @@ const plans = getPlans();
     }
   }
 </style>
+  
+  <script>
+    // このページのDOMが揃ってから動かす。
+    // （Astro の View Transitions は CSS 方式でフル読み込みのままなので、
+    //   DOMContentLoaded で問題なく初期化できる）
+    document.addEventListener('DOMContentLoaded', () => {
+      // ---- 必要な要素をまとめて取得 ----
+      // チップ内のチェックボックス（複数）
+      const checkboxes = Array.from(
+        document.querySelectorAll('.plan-filter__checkbox')
+      );
+      // 各プランカードのラッパー（data-tag-ids を持つ）
+      const items = Array.from(document.querySelectorAll('.plan-list__item'));
+      // 「条件を解除する」ボタン（タグが0件だとそもそも存在しないので null もあり得る）
+      const clearBtn = document.querySelector('.plan-filter__clear');
+      // 0件メッセージ
+      const noResult = document.querySelector('.plan-list__noresult');
+  
+      // チップ自体が無い（＝公開中タグ0件）ページでは何もしない
+      if (checkboxes.length === 0 || items.length === 0) return;
+  
+      // ---- 絞り込み本体 ----
+      function apply() {
+        // 1. チェックされているタグid（pt-xxx）を集める
+        const selected = checkboxes
+          .filter((cb) => cb.checked)
+          .map((cb) => cb.value);
+  
+        // 2. 各カードを表示/非表示に振り分ける
+        let visibleCount = 0; // 表示中の件数を数える（0件メッセージ用）
+  
+        items.forEach((item) => {
+          // このカードが持つタグid配列。空文字を除いてスペース区切りで分解。
+          const tagIds = (item.getAttribute('data-tag-ids') || '')
+            .split(' ')
+            .filter(Boolean);
+  
+          // 何も選ばれていなければ全部表示。
+          // 選ばれていれば「選んだタグを全部持つ」= AND判定で表示。
+          const match =
+            selected.length === 0 ||
+            selected.every((id) => tagIds.includes(id));
+  
+          // is-hidden クラスで出し隠し（display:none は CSS 側に定義済み）
+          item.classList.toggle('is-hidden', !match);
+          if (match) visibleCount++;
+        });
+  
+        // 3. 解除ボタンの出し隠し（1つでも選ばれていれば出す）
+        if (clearBtn) {
+          clearBtn.hidden = selected.length === 0;
+        }
+  
+        // 4. 0件メッセージの出し隠し
+        if (noResult) {
+          noResult.hidden = visibleCount !== 0;
+        }
+      }
+  
+      // ---- イベント登録 ----
+      // 各チェックボックスの切り替えで絞り込みを再実行
+      checkboxes.forEach((cb) => cb.addEventListener('change', apply));
+  
+      // 解除ボタン：全チェックを外して初期状態へ戻す
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          checkboxes.forEach((cb) => (cb.checked = false));
+          apply(); // 外したあと再判定（全表示に戻る）
+        });
+      }
+  
+      // 初期表示（念のため一度そろえておく）
+      apply();
+    });
+  </script>

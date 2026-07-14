@@ -31,6 +31,13 @@ const includeMap = getTaxonomyMap('plan-includes');
 const includeLabels = (plan.includeIds ?? [])
   .map((id) => includeMap.get(id)?.label)
   .filter((label): label is string => Boolean(label));
+
+// 対象スタイル：tagIds（pt-）をラベル化してカード上部に表示する。
+// includes と同じ流儀。未知 id・引退タグ（label が取れないもの）は除外。
+const tagMap = getTaxonomyMap('plan-tags');
+const tagLabels = (plan.tagIds ?? [])
+  .map((id) => tagMap.get(id)?.label)
+  .filter((label): label is string => Boolean(label));
 ---
 
 <article class="plan-card">
@@ -49,6 +56,16 @@ const includeLabels = (plan.includeIds ?? [])
       </picture>
     </div>
     <div class="plan-card__text">
+      {/* 対象スタイルのタグ。1つも無ければブロックごと出さない */}
+      {
+        tagLabels.length > 0 && (
+          <ul class="plan-card__tags">
+            {tagLabels.map((label) => (
+              <li class="plan-card__tag">{label}</li>
+            ))}
+          </ul>
+        )
+      }
       <h3 class="plan-card__title">{plan.title}</h3>
       <p class="plan-card__price">
         <span class="plan-card__price-num">{priceFromText}</span>
@@ -88,6 +105,24 @@ const includeLabels = (plan.includeIds ?? [])
   }
   .plan-card__text {
     padding-top: 22px;
+  }
+  .plan-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+  }
+  .plan-card__tag {
+    font-family: var(--font-jp-sans);
+    font-size: 0.72rem;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: var(--white);
+    background-color: var(--green);
+    padding: 5px 10px;
+    border-radius: 3px;
   }
   .plan-card__title {
     font-family: var(--font-jp-serif);
