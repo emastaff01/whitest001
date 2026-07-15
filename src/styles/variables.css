@@ -32,8 +32,8 @@
   --maxw-content: 1120px;
   --maxw-narrow: 720px;
 
-  --hairline-bronze: rgba(155, 120, 83, 0.2);
-  --hairline-green: rgba(94, 116, 65, 0.2);
+  --hairline-bronze: color-mix(in srgb, var(--bronze) 20%, transparent);
+  --hairline-green: color-mix(in srgb, var(--green) 20%, transparent);
   --hairline-dark: rgba(0, 0, 0, 0.06);
 
   --radius: 0px;

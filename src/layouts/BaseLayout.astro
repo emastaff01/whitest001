@@ -16,27 +16,23 @@ import { getDesignSettings, getAnalyticsSettings } from '../lib/firestore';
 
 // 各ページから渡せる項目（プロパティ）を定義
 interface Props {
-  title: string; // ページタイトル（<title>とOGPに使用）
-  description?: string; // メタディスクリプション
-  ogImage?: string; // OGP画像のパス（任意）
-  showChrome?: boolean; // ヘッダー・フッターを表示するか（管理画面などで false にする）
+  title: string;
+  description?: string;
+  ogImage?: string;
+  showChrome?: boolean;
 }
 
 const {
   title,
   description = '佐賀県伊万里市の結婚式場「ホワイトハウス伊万里」。全面ガラス張りチャペルと水と緑に囲まれた邸宅で、1棟1組完全貸切のプライベートウェディング。2026年6月リブランドOPEN。伊万里駅徒歩10分。',
-  ogImage = '/images/og-image.jpg',
+  ogImage = '/images/ogp/og-image.jpg',
   showChrome = true,
 } = Astro.props;
 
 const settings = getSiteSettings();
-
-// サイトの公開URL（.envのPUBLIC_SITE_URLを優先。無ければ既定値）
-// origin（ホスト）だけを正にする。
 const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
 
-// base（/test-whi）を考慮した絶対URLを作るヘルパー
-// import.meta.env.BASE_URL には astro.config.mjs の base が入る
+
 const base = import.meta.env.BASE_URL; // 例: '/test-whi/'（本番は '/'）
 const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
 // サイトのトップ（式場の代表URL）。EventVenue.url に使う。
@@ -45,7 +41,6 @@ const homeURL = new URL(base, SITE_URL).href;
 const ogImageURL = new URL(`${base}${ogImage}`.replace(/\/{2,}/g, '/'), SITE_URL).href;
 
 // 式場ロゴの絶対URL。site-settings.json に logo があれば作る（無ければ undefined → JSON出力時に自動で省かれる）。
-// 作り方は ogImageURL と同じ（base を付け、二重スラッシュを1つにまとめ、SITE_URL と結合）。
 const logoURL = settings.logo
   ? new URL(`${base}${settings.logo}`.replace(/\/{2,}/g, '/'), SITE_URL).href
     : undefined;
