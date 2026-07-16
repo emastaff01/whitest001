@@ -57,11 +57,10 @@ const gallery = report.gallery ?? [];
 // 検索エンジンに「これは結婚式のレポート記事」と機械可読で伝えるデータ。画面の見た目には影響しない。
 const settings = getSiteSettings(); // 発行元・書き手として使う式場名を取得
 
-// JSON-LD には絶対URL(https://〜)が必要。fair/[id].astro と同じ作り方で SITE_URL を用意する。
-// origin（ホスト）だけを正にする。パス(/test-whi)は base 側で管理する
-const SITE_URL =
-  import.meta.env.PUBLIC_SITE_URL ??
-  'https://ema-run-665477084949.asia-northeast1.run.app';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
+if (!SITE_URL) {
+  throw new Error('PUBLIC_SITE_URL が未設定です。.env を確認してください（plan/[id].astro）');
+}
 
 // 代表画像の絶対URL。heroJpg は "/test-whi/..." の形なので、SITE_URL と結合して https 化する。
   const absoluteImageUrl = new URL(heroJpg, SITE_URL).href;

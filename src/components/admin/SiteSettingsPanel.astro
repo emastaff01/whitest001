@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { headerNav, navGroups } from '../../lib/navigation';
 import type { NavLinkSetting, NavGroupSetting } from '../../types/siteSettings';
 
-// OGP画像ピッカー用の一覧をビルド時に作る（public/images/ogp/ の .jpg を列挙）。
+// OGP画像ピッカー用の一覧をビルド時に作る（public/images/ogp/ を列挙）。
 // FairPanel の fairImages と同じ方式。
 const OGP_IMG_DIR = 'public/images/ogp';
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -15,7 +15,9 @@ let ogpImages: { value: string; url: string }[] = [];
 if (fs.existsSync(OGP_IMG_DIR)) {
   ogpImages = fs
     .readdirSync(OGP_IMG_DIR)
-    .filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f)) // OGPはJPG以外も許容
+    // webp は build/watch:img が自動生成する副産物なので選択肢に出さない。
+    // OGPクローラーには webp 非対応のものがあるため、選ばせるのは jpg/png だけにする。
+    .filter((f) => /\.(jpg|jpeg|png)$/i.test(f))
     .sort()
     .map((f) => ({
       value: `/images/ogp/${f}`,       // 保存値（フルパス・base なし）
@@ -146,21 +148,17 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
     <div class="adm-card">
       
       <div class="adm-field-row">
-        <label class="adm-label" for="ds-color-bronze">
-          
+        <label class="adm-label" for="ds-color-green">
           <span class="adm-label-title">メインアクセントカラー</span>
         </label>
-        <div class="adm-color-wrap">
-          <div class="adm-color-wrap">
-            <input type="color" id="ds-color-green" class="adm-color-input" value="#5e7441" />
-            <input type="text" id="ds-color-green-hex" class="adm-input adm-input--hex" value="#5e7441" maxlength="7" />
-          </div>
 
+        <div class="adm-color-wrap">
+          <input type="color" id="ds-color-green" class="adm-color-input" value="#5e7441" />
+          <input type="text" id="ds-color-green-hex" class="adm-input adm-input--hex" value="#5e7441" maxlength="7" />
         </div>
       </div>
       <div class="adm-field-row">
-        <label class="adm-label" for="ds-color-green">
-        
+        <label class="adm-label" for="ds-color-bronze">
           <span class="adm-label-title">サブアクセントカラー</span>
         </label>
         <div class="adm-color-wrap">
@@ -898,7 +896,6 @@ linkEls.forEach((li, idx) => {
     ogpPickerSelected = currentVal;
   
     const images = getOgpImageList();
-  console.log('images:', images);
     if (images.length === 0) {
       alert('public/images/ogp/ に画像がありません。先に画像を追加してください。');
       return;

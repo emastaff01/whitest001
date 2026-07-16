@@ -34,39 +34,35 @@ interface Props {
 const { plan } = Astro.props;
 const settings = getSiteSettings();
 
-// 画像パス（base 付き）
+// 画像パス
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const heroJpg = `${base}${plan.thumbnail.src}`;
 const heroWebp = heroJpg.replace(/\.jpg$/, '.webp');
 
-// 価格を3桁区切りに整形（日本式）。priceTo があれば「〜上限」も作る。
+// 価格を3桁区切りに整形（日本式）。
 const priceFromText = plan.priceFrom.toLocaleString('ja-JP');
 const priceToText = plan.priceTo ? plan.priceTo.toLocaleString('ja-JP') : null;
 
 // プランに含まれるもの：includeIds（id参照）を表示用ラベルへ変換する。
-// 早見表に無い id（引退・削除済み）は undefined になるので filter で除外（防御）。
-// 「label is string」は型ガード。これで includeLabels が string[] に確定し、check を通る。
 const includeMap = getTaxonomyMap('plan-includes');
 const includeLabels = (plan.includeIds ?? [])
   .map((id) => includeMap.get(id)?.label)
   .filter((label): label is string => Boolean(label));
 
 // 対象スタイル：tagIds（id参照）を表示用ラベルへ変換する（含まれるものと同じ流儀）。
-// 旧 STYLE_LABELS のハードコードを廃止し、マスター(plan-tags)参照へ一本化。
 const tagMap = getTaxonomyMap('plan-tags');
 const tagLabels = (plan.tagIds ?? [])
   .map((id) => tagMap.get(id)?.label)
   .filter((label): label is string => Boolean(label));
   
-// 相談・見積りフォームへのリンク。フォーム実装時に plan_id で照合できるよう
-// クエリで渡す（フェアが ?fair_id= を渡しているのと同じ考え方）。
+// 相談・見積りフォームへのリンク。
 const contactUrl =
 `${url("/contact-plan/")}?plan_id=${encodeURIComponent(plan.id)}`;
 
-// 公開URL（JSON-LD用の絶対URL）
-const SITE_URL =
-  import.meta.env.PUBLIC_SITE_URL ??
-  'https://ema-run-665477084949.asia-northeast1.run.app/test-whi';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
+if (!SITE_URL) {
+  throw new Error('PUBLIC_SITE_URL が未設定です。.env を確認してください（plan/[id].astro）');
+}
 const absoluteImageUrl = new URL(heroJpg, SITE_URL).href;
 
 // Schema.org Product: プランを「商品」として構造化データ化（価格付き）。
