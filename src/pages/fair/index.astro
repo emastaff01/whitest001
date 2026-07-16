@@ -581,7 +581,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
   .fair-sameday__block {
     display: none;
     margin-bottom: 20px;
-    border: 1px solid var(--bronze);
+    border: 1px solid var(--color-secondary);
     background: var(--white);
   }
   .fair-sameday__block.is-current {
@@ -599,7 +599,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
     justify-content: flex-start;
     gap: 4px;
     padding: .5rem 8px .5rem 1rem;
-    border-right: 1px solid var(--hairline-green);
+    border-right: 1px solid var(--hairline-primary);
     background: var(--off-white);
     color: var(--charcoal);
   }
@@ -661,8 +661,8 @@ const sameDayBlocks = [...fairsByDate.entries()]
     width: 100%;
     margin-top: 14px;
     padding: 10px;
-    background: var(--bronze);
-    border: 1px solid var(--hairline-green);
+    background: var(--color-secondary);
+    border: 1px solid var(--hairline-primary);
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
     color: var(--white);
@@ -697,7 +697,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
       justify-content: flex-start;
       gap: 8px;
       border-right: none;
-      border-bottom: 1px solid var(--hairline-green);
+      border-bottom: 1px solid var(--hairline-primary);
     }
   }
   
@@ -710,7 +710,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
   /* ===== フィルタ全体（左：カレンダー／右：タグ） ===== */
   .fair-filter {
     margin-bottom: clamp(28px, 4vw, 44px);
-    border: 1px solid var(--green);
+    border: 1px solid var(--color-primary);
     padding: clamp(16px, 2vw, 24px);
   }
   .fair-filter__cols {
@@ -727,10 +727,10 @@ const sameDayBlocks = [...fairsByDate.entries()]
     font-family: var(--font-jp-sans);
     font-size: 1rem;
     font-weight: bold;
-    color: var(--green);
+    color: var(--color-primary);
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--green);
+    border-bottom: 1px solid var(--color-primary);
   }
 
   /* ===== タグ（右カラム） ===== */
@@ -752,19 +752,19 @@ const sameDayBlocks = [...fairsByDate.entries()]
   .fair-filter__chip span {
     display: inline-block;
     padding: 8px 16px;
-    border: 1px solid var(--bronze);
+    border: 1px solid var(--color-secondary);
     border-radius: 999px;
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
-    color: var(--bronze);
+    color: var(--color-secondary);
     transition: background-color 0.2s, color 0.2s;
   }
   .fair-filter__checkbox:checked + span {
-    background-color: var(--bronze);
+    background-color: var(--color-secondary);
     color: var(--white);
   }
   .fair-filter__checkbox:focus-visible + span {
-    outline: 2px solid var(--bronze);
+    outline: 2px solid var(--color-secondary);
     outline-offset: 2px;
   }
   .fair-filter__weekdays {
@@ -812,7 +812,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
     border: none;
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
-    color: var(--bronze);
+    color: var(--color-secondary);
     cursor: pointer;
   }
   .fair-cal__navbtn--prev {
@@ -828,7 +828,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
     font-family: var(--font-jp-sans);
     font-size: 0.8rem;
     color: var(--gray);
-    border-bottom: 1px solid var(--green);
+    border-bottom: 1px solid var(--color-primary);
   }
   .fair-cal__weekhead span {
     padding: 6px 0;
@@ -899,11 +899,11 @@ const sameDayBlocks = [...fairsByDate.entries()]
    background-color: var(--off-white);
  }
   .fair-cal__cell.is-available:focus-visible {
-    outline: 2px solid var(--bronze);
+    outline: 2px solid var(--color-secondary);
     outline-offset: -2px;
   }
   .fair-cal__cell.is-selected {
-    background-color: var(--bronze);
+    background-color: var(--color-secondary);
   }
   .fair-cal__cell.is-selected .fair-cal__daynum,
   .fair-cal__cell.is-selected .fair-cal__mark {
@@ -915,7 +915,7 @@ const sameDayBlocks = [...fairsByDate.entries()]
     position: sticky;
     top: var(--header-h);
     z-index: 20;
-    background-color: color-mix(in srgb, var(--green) 70%, transparent);
+    background-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
     backdrop-filter:blur(3px);
     width:100%;
     margin-bottom:1rem;

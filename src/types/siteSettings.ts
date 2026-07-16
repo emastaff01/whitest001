@@ -4,7 +4,7 @@
 
 /** デザイン設定（カラー・フォント・ボタン形状） */
 export type DesignSettings = {
-  // ブランドカラー（CSS変数 --bronze / --green に対応）
+  // ブランドカラー
   colorBronze: string;
   colorGreen: string;
   // フォント（CSS変数 --font-jp-serif 等に対応。読み込み済みフォント名を文字列で保持）

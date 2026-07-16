@@ -46,7 +46,7 @@
   transform: translateX(-50%);
   width: 40px;
   height: 2px;
-  background-color: var(--green);
+  background-color: var(--color-primary);
 }
 
 .facility__block {
@@ -73,7 +73,7 @@
   position: absolute;
   inset: 0;
   transform: translate(14px, 14px);
-  border: .5px solid var(--bronze);
+  border: .5px solid var(--color-secondary);
   z-index: -1;
   pointer-events: none;
 }
@@ -86,7 +86,7 @@
   font-weight: var(--weight-light);
   font-size: clamp(1.15rem, 2.2vw, 1.45rem);
   line-height: 1.5;
-  color: var(--green);
+  color: var(--color-primary);
   margin-bottom: 20px;
 }
  /* → POINT01 / POINT02 / POINT03 */
@@ -97,7 +97,7 @@
   font-family: var(--font-en-label);
   font-size: 0.75rem;
   letter-spacing: 0.12em;
-  color: var(--green);
+  color: var(--color-primary);
 }
 
 .facility__block-body {
@@ -170,7 +170,7 @@
   transform: scale(1.05);
 }
 .gallery-thumb:focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 .lightbox {

@@ -699,7 +699,7 @@ width: 100%;
   padding: 12px;
   border: none;
   border-radius: 4px;
-  background: var(--green, var(--accent));
+  background: var(--color-primary);
   color: #fff;
   font-size: 1rem;
   cursor: pointer;

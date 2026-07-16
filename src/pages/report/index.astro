@@ -122,11 +122,11 @@ const reportTagList = getTaxonomies('report-tags');
     display: inline-flex;
     align-items: center;
     padding: 8px 18px;
-    border: 1px solid var(--bronze);
+    border: 1px solid var(--color-secondary);
     border-radius: 999px;
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
-    color: var(--bronze);
+    color: var(--color-secondary);
     background-color: var(--white);
     cursor: pointer;
     user-select: none;
@@ -140,10 +140,10 @@ const reportTagList = getTaxonomies('report-tags');
     pointer-events: none;
   }
   .report-filter__chip:not(:has(.report-filter__checkbox:checked)):hover {
-    background-color: color-mix(in srgb, var(--bronze) 12%, #fff);
+    background-color: color-mix(in srgb, var(--color-secondary) 12%, #fff);
   }
   .report-filter__chip:has(.report-filter__checkbox:checked) {
-    background-color: var(--bronze);
+    background-color: var(--color-secondary);
     color: var(--white);
   }
   .report-filter__clear {
@@ -159,8 +159,8 @@ const reportTagList = getTaxonomies('report-tags');
     transition: border-color 0.2s, color 0.2s;
   }
   .report-filter__clear:hover {
-    border-color: var(--bronze);
-    color: var(--bronze);
+    border-color: var(--color-secondary);
+    color: var(--color-secondary);
   }
   .report-list__item.is-hidden {
     display: none !important;

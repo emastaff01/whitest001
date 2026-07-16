@@ -184,8 +184,8 @@ const structuredData = {
     {design && (
       <style set:html={`
         :root {
-          --bronze: ${design.colorBronze} !important;
-          --green: ${design.colorGreen} !important;
+          --color-secondary: ${design.colorBronze} !important;
+          --color-primary: ${design.colorGreen} !important;
           --radius: ${
             design.buttonShape === 'pill'    ? '9999px' :
             design.buttonShape === 'rounded' ? '4px'    : '0px'

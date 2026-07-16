@@ -326,7 +326,7 @@ const rawPlanId = new URLSearchParams(location.search).get("plan_id") || "";
   }
   .form-control:focus {
 	outline: none;
-	border-color: #8a7a5c;
+	border-color: var(--brown);
 	box-shadow: 0 0 0 3px rgba(138, 122, 92, 0.15);
   }
   .form-row--check {
@@ -346,14 +346,14 @@ const rawPlanId = new URLSearchParams(location.search).get("plan_id") || "";
 	flex-shrink: 0;
   }
   .contact__link {
-	color: #8a7a5c;
+	color: var(--brown);
 	text-decoration: underline;
   }
   .contact__target {
 	  margin-bottom: 24px;
 	  padding: 12px 16px;
 	  background: #f6f2ea;
-	  border-left: 4px solid #8a7a5c;
+	  border-left: 4px solid var(--brown);
 	  border-radius: 4px;
 	  font-weight: 600;
 	}
@@ -368,7 +368,7 @@ const rawPlanId = new URLSearchParams(location.search).get("plan_id") || "";
 	font-size: 1rem;
 	font-weight: 600;
 	color: #fff;
-	background: #8a7a5c;
+	background: var(--brown);
 	border: none;
 	border-radius: 6px;
 	cursor: pointer;

@@ -6,11 +6,10 @@
   --charcoal: #2c2c2a;
   --dark-gray: #4a4a47;
   --gray: #8a8580;
-
-  --bronze: #9b7853;
-  --green: #5e7441;
-
+  --color-primary: #5e7441;
+  --color-secondary: #9b7853;
   --red: #af1a1a;
+  --brown:#8a7a5c;
 
   --font-jp-serif: "Noto Serif JP", serif;
   --font-jp-sans: "Noto Sans JP", sans-serif;
@@ -33,10 +32,10 @@
   --maxw-content: 1120px;
   --maxw-narrow: 720px;
 
-  --hairline-bronze: color-mix(in srgb, var(--bronze) 20%, transparent);
-  --hairline-green: color-mix(in srgb, var(--green) 20%, transparent);
+  --hairline-primary: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  --hairline-secondary: color-mix(in srgb, var(--color-secondary) 20%, transparent);
   --hairline-dark: rgba(0, 0, 0, 0.06);
-
+  
   --radius: 0px;
   --radius-sm: 4px;
 

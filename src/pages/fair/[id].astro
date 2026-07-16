@@ -82,10 +82,10 @@ const sortedSchedule = [...fair.schedule].sort((a, b) => (a.date < b.date ? -1 :
 const reservationUrl =
 `${url("/contact-fair/")}?fair_id=${encodeURIComponent(fair.reservationFormId ?? fair.id)}`;
 
-// 公開URL（JSON-LD用の絶対URL）
-const SITE_URL =
-import.meta.env.PUBLIC_SITE_URL ??
-'https://ema-run-665477084949.asia-northeast1.run.app';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
+if (!SITE_URL) {
+  throw new Error('PUBLIC_SITE_URL が未設定です。.env を確認してください（fair/[id].astro）');
+}
 const absoluteImageUrl = new URL(heroJpg, SITE_URL).href;
 
 // Schema.org Event: 日付×時間枠ごとに1件のイベントとして出力
@@ -420,7 +420,7 @@ const events = fair.schedule.flatMap((day) =>
     text-transform: uppercase;
     font-size: 0.72rem;
     letter-spacing: 0.18em;
-    color: var(--green);
+    color: var(--color-primary);
     margin-bottom: 24px;
   }
   .fair-detail__title {
@@ -448,8 +448,8 @@ const events = fair.schedule.flatMap((day) =>
     font-family: var(--font-jp-sans);
     font-size: 0.74rem;
     letter-spacing: 0.04em;
-    color: var(--green);
-    border: 0.5px solid var(--hairline-green);
+    color: var(--color-primary);
+    border: 0.5px solid var(--hairline-primary);
     padding: 3px 12px;
   }
   .fair-detail__duration {
@@ -509,7 +509,7 @@ const events = fair.schedule.flatMap((day) =>
     font-family: var(--font-jp-sans);
     font-size: 1rem;
     letter-spacing: 0.1em;
-    color: var(--green);
+    color: var(--color-primary);
     margin-bottom: 20px;
   }
 
@@ -580,13 +580,13 @@ const events = fair.schedule.flatMap((day) =>
   }
   
   :global(.fair-sched__time:hover:not(:disabled)) {
-    background-color: var(--green);
+    background-color: var(--color-primary);
   }
   :global(.fair-sched__time:hover:not(:disabled) span) {
     color: var(--white);
   }
   :global(.fair-sched__time.is-active) {
-    border: 1px solid var(--green);
+    border: 1px solid var(--color-primary);
     background-color: var(--off-white);
   }
   :global(.fair-sched__time:disabled) {
@@ -607,7 +607,7 @@ const events = fair.schedule.flatMap((day) =>
     font-size: 0.72rem;
   }
  :global( .fair-sched__time[data-status='available'] .fair-sched__time-stat) {
-    color: var(--green);
+    color: var(--color-primary);
   }
   :global(.fair-sched__time[data-status='few'] .fair-sched__time-stat) {
     color: var(--dark-gray);
@@ -615,13 +615,7 @@ const events = fair.schedule.flatMap((day) =>
   :global(.fair-sched__time[data-status='full'] .fair-sched__time-stat) {
     color: var(--gray);
   }
-  :global(.fair-sched__times+button.fair-sched__time){
-  background:var(--accent);
-  color:var(--white);
-  padding:5px 10px;
-  margin-right:1rem;
-  display:block;
-  }
+
 
   :global(.fair-sched__selected) {
     margin-top: 8px;
@@ -660,14 +654,6 @@ const events = fair.schedule.flatMap((day) =>
   
   }
   
-  :global(.fair-sched__contact){
-  width:90%;
-  margin:1rem auto;
-  background:var(--pale-beige);
-  padding:2rem 1rem;
-  }
-  
-  
 
   /* 特典 */
   .fair-detail__benefits {
@@ -682,7 +668,7 @@ const events = fair.schedule.flatMap((day) =>
   }
   .fair-detail__benefits li::before {
     content: '・';
-    color: var(--green);
+    color: var(--color-primary);
     position: absolute;
     left: 0;
   }
@@ -694,8 +680,8 @@ const events = fair.schedule.flatMap((day) =>
   .fair-detail__back a {
     font-family: var(--font-jp-sans);
     font-size: 0.88rem;
-    color: var(--green);
-    border-bottom: 0.5px solid var(--hairline-green);
+    color: var(--color-primary);
+    border-bottom: 0.5px solid var(--hairline-primary);
     padding-bottom: 4px;
     transition: color 0.2s ease, border-color 0.2s ease;
   }

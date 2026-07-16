@@ -110,7 +110,7 @@ const planTagList = getTaxonomies('plan-tags');
     font-family: var(--font-jp-sans);
     font-size: 0.9rem;
     font-weight: 700;
-    color: var(--bronze);
+    color: var(--color-secondary);
     margin-bottom: 12px;
   }
   .plan-filter__chips {
@@ -123,11 +123,11 @@ const planTagList = getTaxonomies('plan-tags');
     display: inline-flex;
     align-items: center;
     padding: 8px 18px;
-    border: 1px solid var(--bronze);
+    border: 1px solid var(--color-secondary);
     border-radius: 999px;
     font-family: var(--font-jp-sans);
     font-size: 0.85rem;
-    color: var(--bronze);
+    color: var(--color-secondary);
     background-color: var(--white);
     cursor: pointer;
     user-select: none;
@@ -141,10 +141,10 @@ const planTagList = getTaxonomies('plan-tags');
     pointer-events: none;
   }
   .plan-filter__chip:not(:has(.plan-filter__checkbox:checked)):hover {
-    background-color: color-mix(in srgb, var(--bronze) 12%, #fff);
+    background-color: color-mix(in srgb, var(--color-secondary) 12%, #fff);
   }
   .plan-filter__chip:has(.plan-filter__checkbox:checked) {
-    background-color: var(--bronze);
+    background-color: var(--color-secondary);
     color: var(--white);
   }
   .plan-filter__clear {
@@ -160,8 +160,8 @@ const planTagList = getTaxonomies('plan-tags');
     transition: border-color 0.2s, color 0.2s;
   }
   .plan-filter__clear:hover {
-    border-color: var(--bronze);
-    color: var(--bronze);
+    border-color: var(--color-secondary);
+    color: var(--color-secondary);
   }
   .plan-list__item.is-hidden {
     display: none !important;
