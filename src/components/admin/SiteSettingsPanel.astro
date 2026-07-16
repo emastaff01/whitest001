@@ -171,8 +171,15 @@ const defaultNavGroups: NavGroupSetting[] = navGroups.map((group, gi) => ({
     </div>
   
     <!-- フォント設定 -->
-    <h3 class="adm-field-title">フォント</h3>
-    <div class="adm-card">
+    <!-- 2026-07-16：フォント変更は公開サイトへ反映されないため非表示にする。
+         BaseLayout の CSS変数の上書きが bronze / green / radius の3つだけで、
+         フォント変数を出力していないため、選んで保存しても見た目が変わらない。
+         「触れるのに何も起きない」UIになるので隠す判断。
+         script 側（FONT_OPTIONS・buildFontOptions・harvestDesign のフォント分）は残置する。
+         消すと未使用ヘルパーで check が落ち、Firestore の既存データとの整合も崩れるため。
+         再開するときは、この2要素の hidden を外すだけでよい。 -->
+    <h3 class="adm-field-title" hidden>フォント</h3>
+    <div class="adm-card" hidden>
       
   
       <!-- フォント選択に使う選択肢は script 側で定数として持つ。
