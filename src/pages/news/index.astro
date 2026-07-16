@@ -29,8 +29,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const toAssetPath = (src: string) => `${base}${src}`;
 const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
 
-// 'YYYY-MM-DD' → 'YYYY.MM.DD'（表示用）
+/// 'YYYY-MM-DD' → 'YYYY.MM.DD'（表示用）
 const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
+
+// キャッチ画像が未設定のとき、一覧だけで使う代替画像（詳細ページでは使わない）
+const NEWS_NOIMAGE_SRC = '/images/news/noimage_thum.jpg';
+
+// サムネの src を決める。thumbnail が無い / src が空文字 のどちらでも代替画像を返す。
+// ※ thumbnail は「箱」なので truthy になる。判定は必ず中身（src）で行う。
+const thumbSrcOf = (post: Post) => post.thumbnail?.src || NEWS_NOIMAGE_SRC;
+
+// 代替画像は装飾なので alt は空にする（読み上げ対象から外す）
+const thumbAltOf = (post: Post) => (post.thumbnail?.src ? post.thumbnail.alt : '');
+---
 ---
 
 <BaseLayout
@@ -50,22 +61,20 @@ const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
           <div class="news__list">
             {posts.map((post) => (
               <a class="news-row" href={url(`/news/${post.id}/`)}>
-                {/* キャッチ画像がある記事だけサムネを表示 */}
-                {post.thumbnail && (
-                  <div class="news-row__thumb">
-                    <picture>
-                      <source type="image/webp" srcset={toWebpPath(post.thumbnail.src)} />
-                      <img
-                        src={toAssetPath(post.thumbnail.src)}
-                        alt={post.thumbnail.alt}
-                        width="160"
-                        height="107"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </picture>
-                  </div>
-                )}
+                {/* 一覧では必ずサムネ枠を出す。未設定なら noimage_thum を表示（行の高さを揃える意味もある） */}
+                <div class="news-row__thumb">
+                  <picture>
+                    <source type="image/webp" srcset={toWebpPath(thumbSrcOf(post))} />
+                    <img
+                      src={toAssetPath(thumbSrcOf(post))}
+                      alt={thumbAltOf(post)}
+                      width="160"
+                      height="107"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </picture>
+                </div>
                 <div class="news-row__text">
                   <div class="news-row__meta">
                     <span class="news-row__date">{toDisplayDate(post.publishedAt)}</span>

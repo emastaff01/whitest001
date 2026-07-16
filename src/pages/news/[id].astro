@@ -51,26 +51,33 @@ const toWebpPath = (src: string) => toAssetPath(src).replace(/\.jpg$/, '.webp');
 // 'YYYY-MM-DD' → 'YYYY.MM.DD'
 const toDisplayDate = (iso: string) => iso.replaceAll('-', '.');
 
-// キャッチ画像（任意）。ある時だけヒーローを出す。
-const heroJpg = post.thumbnail ? toAssetPath(post.thumbnail.src) : '';
-const heroWebp = post.thumbnail ? toWebpPath(post.thumbnail.src) : '';
+// キャッチ画像（任意）。判定は「箱（thumbnail）」ではなく「中身（src）」で行う。
+// thumbnail 自体が無い / src が空文字 の両方を undefined に正規化して、以降はこれだけを見る。
+// ※ || を使うのは空文字も拾うため（?? は null と undefined しか拾わない）
+const thumbSrc = post.thumbnail?.src || undefined;
+const thumbAlt = post.thumbnail?.alt ?? '';
+
+// ヒーロー画像のパス（画像なしのときは組み立てない）
+const heroJpg = thumbSrc ? toAssetPath(thumbSrc) : '';
+const heroWebp = thumbSrc ? toWebpPath(thumbSrc) : '';
 
 // OG画像：キャッチ画像→無ければサイトロゴにフォールバック
-const ogImage = post.thumbnail?.src ?? settings.logo;
+// thumbSrc は undefined に正規化済みなので ?? が正しく効く
+const ogImage = thumbSrc ?? settings.logo;
 
-// ---- 構造化データ（Article）----
-// 絶対URL(https://)が必要。report と同じく SITE_URL を基準に組み立てる。
-// origin（ホスト）だけを正にする。パス(/test-whi)は base 側で管理する
-const SITE_URL =
-  import.meta.env.PUBLIC_SITE_URL ??
-  'https://ema-run-665477084949.asia-northeast1.run.app';
+
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL;
+if (!SITE_URL) {
+  throw new Error('PUBLIC_SITE_URL が未設定です。.env を確認してください（news/[id].astro）');
+}
 const pageUrl = new URL(url(`/news/${post.id}/`), SITE_URL).href;
 const homeUrl = new URL(`${base}/`, SITE_URL).href;
 
 // Article の image：キャッチ画像→無ければロゴ→両方無ければ image キーを出さない
 let ldImage: string | undefined;
-if (post.thumbnail) {
-  ldImage = new URL(toAssetPath(post.thumbnail.src), SITE_URL).href;
+if (thumbSrc) {
+  // 箱ではなく中身で判定（空文字なら下のロゴへ落とす）
+  ldImage = new URL(toAssetPath(thumbSrc), SITE_URL).href;
 } else if (settings.logo) {
   ldImage = new URL(toAssetPath(settings.logo), SITE_URL).href;
 }
@@ -116,18 +123,16 @@ articleLd.dateModified = published;
   description={post.body.slice(0, 100)}
   ogImage={ogImage}
 >
-  {/* 構造化データ(Article)。画面には表示されない */}
   <script type="application/ld+json" is:inline set:html={JSON.stringify(articleLd)} />
 
   <article class="news-detail">
-    {/* ヒーロー画像：キャッチ画像がある時だけ表示 */}
-    {post.thumbnail && (
+    {thumbSrc && (
       <div class="news-detail__hero">
         <picture>
           <source type="image/webp" srcset={heroWebp} />
           <img
             src={heroJpg}
-            alt={post.thumbnail.alt}
+            alt={thumbAlt}
             width="1600"
             height="900"
             loading="eager"
