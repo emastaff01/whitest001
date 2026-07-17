@@ -128,18 +128,6 @@ export interface Report {
 }
 
 // -------------------------------------------------------------
-// ウェディングスタイル（コレクション: styles / 初期2件・将来拡張）
-// -------------------------------------------------------------
-export interface Style {
-  id: string; // 例: 'private' / 'small'
-  title: string; // 例: '1棟貸切ウェディング'
-  description: string;
-  thumbnail: SiteImage;
-  isPublished: boolean;
-  sortOrder?: number;
-}
-
-// -------------------------------------------------------------
 // お知らせ（コレクション: posts）
 // -------------------------------------------------------------
 export interface Post {

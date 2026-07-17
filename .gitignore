@@ -14,6 +14,7 @@ dist/
 
 # OS・エディタが作る不要ファイル
 .DS_Store
+**/.DS_Store
 *.log
 npm-debug.log*
 # Cloudflare Worker は独立したリポジトリで管理するため、このリポジトリには含めない
