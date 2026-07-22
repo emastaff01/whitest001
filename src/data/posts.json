@@ -22,17 +22,5 @@
       "src": "/images/news/instagram-launched.jpg",
       "alt": "公式Instagramで発信する邸宅の様子"
     }
-  },
-  {
-    "id": "テストん",
-    "title": "てすてす",
-    "body": "テストん",
-    "publishedAt": "2026-06-08",
-    "isPublished": true,
-    "categoryId": "nc-fair",
-    "thumbnail": {
-      "src": "",
-      "alt": "テストの画像"
-    }
   }
 ]
